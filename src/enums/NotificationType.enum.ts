@@ -1,0 +1,9 @@
+export enum NotificationType {
+  ATTENDANCE = 'ATTENDANCE',
+  PAYMENT = 'PAYMENT',
+  ASSIGNMENT = 'ASSIGNMENT',
+  EXAM = 'EXAM',
+  RESULT = 'RESULT',
+  GENERAL = 'GENERAL',
+  AI_ALERT = 'AI_ALERT',
+}

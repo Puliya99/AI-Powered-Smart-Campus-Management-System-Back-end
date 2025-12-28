@@ -84,7 +84,7 @@ export const env: EnvConfig = {
   DB_HOST: getEnv('DB_HOST', 'localhost'),
   DB_PORT: getEnvAsNumber('DB_PORT', 5432),
   DB_USER: getEnv('DB_USER', 'postgres'),
-  DB_PASSWORD: getEnv('DB_PASSWORD'),
+  DB_PASSWORD: getEnv('DB_PASSWORD', '1234'),
   DB_NAME: getEnv('DB_NAME', 'smart_campus_db'),
   DB_SSL: getEnvAsBoolean('DB_SSL', false),
 
