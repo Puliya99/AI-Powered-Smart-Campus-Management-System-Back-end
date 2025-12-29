@@ -4,7 +4,6 @@ config()
 
 interface EnvConfig {
   // Server
-  NODE_ENV: string
   PORT: number
   API_PREFIX: string
 
@@ -45,9 +44,9 @@ interface EnvConfig {
 }
 
 const getEnv = (key: string, defaultValue?: string): string => {
-  const value = process.env[key] || defaultValue
+  const value = process.env[key] ?? defaultValue
   if (!value) {
-    throw new Error(`Environment variable ${key} is not defined`)
+    throw new Error(`❌ Environment variable ${key} is not defined`)
   }
   return value
 }
@@ -56,18 +55,20 @@ const getEnvAsNumber = (key: string, defaultValue?: number): number => {
   const value = process.env[key]
   if (!value) {
     if (defaultValue !== undefined) return defaultValue
-    throw new Error(`Environment variable ${key} is not defined`)
+    throw new Error(`❌ Environment variable ${key} is not defined`)
   }
-  const parsed = parseInt(value, 10)
-  if (isNaN(parsed)) {
-    throw new Error(`Environment variable ${key} must be a number`)
+
+  const parsed = Number(value)
+  if (Number.isNaN(parsed)) {
+    throw new Error(`❌ Environment variable ${key} must be a number`)
   }
+
   return parsed
 }
 
 const getEnvAsBoolean = (
   key: string,
-  defaultValue: boolean = false
+  defaultValue = false
 ): boolean => {
   const value = process.env[key]
   if (!value) return defaultValue
@@ -76,7 +77,6 @@ const getEnvAsBoolean = (
 
 export const env: EnvConfig = {
   // Server
-  NODE_ENV: getEnv('NODE_ENV', 'development'),
   PORT: getEnvAsNumber('PORT', 5000),
   API_PREFIX: getEnv('API_PREFIX', '/api/v1'),
 
@@ -84,34 +84,43 @@ export const env: EnvConfig = {
   DB_HOST: getEnv('DB_HOST', 'localhost'),
   DB_PORT: getEnvAsNumber('DB_PORT', 5432),
   DB_USER: getEnv('DB_USER', 'postgres'),
-  DB_PASSWORD: getEnv('DB_PASSWORD', '1234'),
+  DB_PASSWORD: getEnv('DB_PASSWORD'),
   DB_NAME: getEnv('DB_NAME', 'smart_campus_db'),
   DB_SSL: getEnvAsBoolean('DB_SSL', false),
 
-  // JWT
+  // JWT (SECURE)
   JWT_SECRET: getEnv('JWT_SECRET'),
-  JWT_EXPIRE: getEnv('JWT_EXPIRE', '7d'),
-  JWT_REFRESH_SECRET: getEnv('JWT_REFRESH_SECRET', getEnv('JWT_SECRET')),
+  JWT_EXPIRE: getEnv('JWT_EXPIRE', '15m'),
+  JWT_REFRESH_SECRET: getEnv('JWT_REFRESH_SECRET'),
   JWT_REFRESH_EXPIRE: getEnv('JWT_REFRESH_EXPIRE', '30d'),
 
   // AI Service
   AI_SERVICE_URL: getEnv('AI_SERVICE_URL', 'http://localhost:8000'),
 
   // Upload
-  MAX_FILE_SIZE: getEnvAsNumber('MAX_FILE_SIZE', 5242880), // 5MB default
+  MAX_FILE_SIZE: getEnvAsNumber(
+    'MAX_FILE_SIZE',
+    5 * 1024 * 1024
+  ),
   UPLOAD_PATH: getEnv('UPLOAD_PATH', './uploads'),
 
   // Rate Limiting
-  RATE_LIMIT_WINDOW_MS: getEnvAsNumber('RATE_LIMIT_WINDOW_MS', 900000), // 15 minutes
-  RATE_LIMIT_MAX_REQUESTS: getEnvAsNumber('RATE_LIMIT_MAX_REQUESTS', 100),
+  RATE_LIMIT_WINDOW_MS: getEnvAsNumber(
+    'RATE_LIMIT_WINDOW_MS',
+    15 * 60 * 1000
+  ),
+  RATE_LIMIT_MAX_REQUESTS: getEnvAsNumber(
+    'RATE_LIMIT_MAX_REQUESTS',
+    100
+  ),
 
-  // CORS
+  // CORS (explicit)
   CORS_ORIGIN: getEnv('CORS_ORIGIN', '*'),
 
   // Email (Optional)
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_PORT: process.env.SMTP_PORT
-    ? parseInt(process.env.SMTP_PORT)
+    ? Number(process.env.SMTP_PORT)
     : undefined,
   SMTP_USER: process.env.SMTP_USER,
   SMTP_PASSWORD: process.env.SMTP_PASSWORD,
@@ -120,14 +129,28 @@ export const env: EnvConfig = {
 
 // Validate critical environment variables
 export const validateEnv = (): void => {
-  const requiredVars = ['DB_PASSWORD', 'JWT_SECRET']
+  const requiredVars = [
+    'DB_PASSWORD',
+    'JWT_SECRET',
+    'JWT_REFRESH_SECRET'
+  ]
 
-  const missingVars = requiredVars.filter((varName) => !process.env[varName])
+  const missing = requiredVars.filter(
+    (key) => !process.env[key]
+  )
 
-  if (missingVars.length > 0) {
+  if (missing.length > 0) {
     throw new Error(
-      `Missing required environment variables: ${missingVars.join(', ')}`
+      `❌ Missing required environment variables: ${missing.join(', ')}`
     )
+  }
+
+  if (env.JWT_SECRET.length < 64) {
+    throw new Error('❌ JWT_SECRET must be at least 64 characters')
+  }
+
+  if (env.JWT_REFRESH_SECRET.length < 64) {
+    throw new Error('❌ JWT_REFRESH_SECRET must be at least 64 characters')
   }
 
   console.log('✅ Environment variables validated successfully')
