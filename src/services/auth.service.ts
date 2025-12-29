@@ -3,7 +3,9 @@ import { User } from '../entities/User.entity';
 import { RegisterDto, LoginDto, ChangePasswordDto } from '../dto/auth.dto';
 import jwt from 'jsonwebtoken';
 import { env } from '../config/env';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
+import { Role } from '../enums/Role.enum';
+import { Gender } from '../enums/Gender.enum';
 
 export class AuthService {
   private userRepository = AppDataSource.getRepository(User);
@@ -34,14 +36,14 @@ export class AuthService {
       password: data.password, // Will be hashed by entity hook
       firstName: data.firstName,
       lastName: data.lastName,
-      role: data.role || 'STUDENT',
+      role: (data.role as Role) || Role.STUDENT,
       registrationNumber,
       nameWithInitials: this.generateNameWithInitials(data.firstName, data.lastName),
-      title: 'Mr', // Default, can be updated later
-      gender: 'OTHER', // Default, can be updated later
-      dateOfBirth: new Date('2000-01-01'), // Default, must be updated
-      nic: 'PENDING', // Must be updated
-      mobileNumber: '0000000000', // Must be updated
+      title: 'Mr',
+      gender: Gender.OTHER,
+      dateOfBirth: new Date('2000-01-01'),
+      nic: 'PENDING',
+      mobileNumber: '0000000000',
       address: 'Not provided',
     });
 
@@ -141,10 +143,10 @@ export class AuthService {
   }
 
   // Generate JWT token
-  private generateToken(userId: string, role: string): string {
+  private generateToken(userId: string, role: Role): string {
     return jwt.sign({ userId, role }, env.JWT_SECRET, {
       expiresIn: env.JWT_EXPIRE,
-    });
+    } as jwt.SignOptions);
   }
 
   // Generate unique registration number
