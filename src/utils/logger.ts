@@ -16,7 +16,7 @@ const logFormat = winston.format.combine(
   winston.format.json()
 );
 
-// Console format for development
+// Console format
 const consoleFormat = winston.format.combine(
   winston.format.colorize(),
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
@@ -31,12 +31,12 @@ const consoleFormat = winston.format.combine(
 
 // Create the logger
 export const logger = winston.createLogger({
-  level: process.env.NODE_ENV === 'development' ? 'debug' : 'info',
+  level: process.env.LOG_LEVEL || 'info',
   format: logFormat,
   transports: [
     // Console transport
     new winston.transports.Console({
-      format: process.env.NODE_ENV === 'development' ? consoleFormat : logFormat,
+      format: consoleFormat,
     }),
     // Error log file
     new winston.transports.File({
