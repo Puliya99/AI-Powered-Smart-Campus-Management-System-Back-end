@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './auth.routes';
+import passwordResetRoutes from './password-reset.routes';
 
 // Import other route modules here as you create them
 // import studentRoutes from './student.routes';
@@ -9,6 +10,7 @@ const router = Router();
 
 // Register routes
 router.use('/auth', authRoutes);
+router.use('/password', passwordResetRoutes);
 // router.use('/students', studentRoutes);
 // router.use('/lecturers', lecturerRoutes);
 
@@ -26,6 +28,11 @@ router.get('/', (req, res) => {
         me: 'GET /api/v1/auth/me',
         changePassword: 'POST /api/v1/auth/change-password',
         logout: 'POST /api/v1/auth/logout',
+      },
+      password: {
+        forgot: 'POST /api/v1/password/forgot-password',
+        verify: 'GET /api/v1/password/verify-token/:token',
+        reset: 'POST /api/v1/password/reset-password',
       },
       // Add more as you build them
     },
