@@ -1,6 +1,7 @@
 import { AppDataSource } from '../config/database';
 import { User } from '../entities/User.entity';
 import crypto from 'crypto';
+import emailService from './email.service';
 
 interface PasswordResetToken {
   userId: string;
@@ -21,7 +22,7 @@ export class PasswordResetService {
     });
 
     if (!user) {
-      // Don't reveal if user exists
+      // Don't reveal if user exists for security
       return {
         message: 'If that email exists, we sent a password reset link',
       };
@@ -42,16 +43,22 @@ export class PasswordResetService {
       expiresAt: new Date(Date.now() + 60 * 60 * 1000), // 1 hour
     });
 
-    // In production, send email with reset link
-    // const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
-    // await sendEmail(user.email, resetUrl);
+    // Send password reset email
+    try {
+      await emailService.sendPasswordResetEmail(user.email, resetToken);
+      console.log('✅ Password reset email sent to:', user.email);
+    } catch (error) {
+      console.error('❌ Failed to send password reset email:', error);
+      // Continue even if email fails - don't expose this to user
+    }
 
-    console.log('Password reset token:', resetToken);
-    console.log('User ID:', user.id);
+    // Always log token for testing/debugging
+    console.log('🔑 Password reset token:', resetToken);
+    console.log('👤 User ID:', user.id);
 
     return {
       message: 'If that email exists, we sent a password reset link',
-      resetToken, // Always include for now
+      resetToken, // Always include token in response
     };
   }
 
@@ -114,6 +121,15 @@ export class PasswordResetService {
     // Delete used token
     resetTokens.delete(hashedToken);
 
+    // Send confirmation email
+    try {
+      await emailService.sendPasswordChangedEmail(user.email, user.firstName);
+      console.log('✅ Password changed confirmation email sent');
+    } catch (error) {
+      console.error('❌ Failed to send password changed email:', error);
+      // Don't fail the request if email fails
+    }
+
     return {
       message: 'Password reset successfully',
     };
@@ -122,11 +138,20 @@ export class PasswordResetService {
   // Cleanup expired tokens (call this periodically)
   cleanupExpiredTokens() {
     const now = new Date();
+    let cleaned = 0;
+
     for (const [token, data] of resetTokens.entries()) {
       if (now > data.expiresAt) {
         resetTokens.delete(token);
+        cleaned++;
       }
     }
+
+    if (cleaned > 0) {
+      console.log(`🧹 Cleaned up ${cleaned} expired password reset tokens`);
+    }
+
+    return cleaned;
   }
 }
 
