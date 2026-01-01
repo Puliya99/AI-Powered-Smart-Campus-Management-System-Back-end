@@ -14,7 +14,12 @@ export class AuthService {
   async register(data: RegisterDto) {
     // Check if user already exists
     const existingUser = await this.userRepository.findOne({
-      where: [{ email: data.email }, { username: data.username }],
+      where: [
+        { email: data.email },
+        { username: data.username },
+        { mobileNumber: (data as any).mobileNumber },
+        { nic: (data as any).nic },
+      ],
     });
 
     if (existingUser) {
@@ -24,9 +29,15 @@ export class AuthService {
       if (existingUser.username === data.username) {
         throw new Error('Username already taken');
       }
+      if (existingUser.mobileNumber === (data as any).mobileNumber) {
+        throw new Error('Mobile number already registered');
+      }
+      if (existingUser.nic === (data as any).nic) {
+        throw new Error('NIC already registered');
+      }
     }
 
-    // Generate registration number
+    // Generate unique registration number
     const registrationNumber = await this.generateRegistrationNumber();
 
     // Create new user
@@ -42,8 +53,8 @@ export class AuthService {
       title: 'Mr',
       gender: Gender.OTHER,
       dateOfBirth: new Date('2000-01-01'),
-      nic: 'PENDING',
-      mobileNumber: '0000000000',
+      nic: (data as any).nic,
+      mobileNumber: (data as any).mobileNumber,
       address: 'Not provided',
     });
 
@@ -70,12 +81,6 @@ export class AuthService {
       .where('user.email = :email', { email: data.email })
       .getOne();
 
-    console.log('User found:', !!user);
-    if (user) {
-      console.log('Password from DB:', user.password?.substring(0, 10) + '...');
-      console.log('Is active:', user.isActive);
-    }
-    
     if (!user) {
       throw new Error('Invalid email or password');
     }
@@ -85,9 +90,7 @@ export class AuthService {
     }
 
     // Validate password
-    console.log('Comparing passwords...');
     const isValidPassword = await bcrypt.compare(data.password, user.password);
-    console.log('Password valid:', isValidPassword);
 
     if (!isValidPassword) {
       throw new Error('Invalid email or password');
@@ -133,7 +136,6 @@ export class AuthService {
 
     // Verify current password
     const isValidPassword = await bcrypt.compare(data.currentPassword, user.password);
-
     if (!isValidPassword) {
       throw new Error('Current password is incorrect');
     }
@@ -163,6 +165,13 @@ export class AuthService {
     const count = await this.userRepository.count();
     const number = String(count + 1).padStart(4, '0');
     return `REG${year}${number}`;
+  }
+
+  // Generate temporary unique mobile number
+  private async generateTempMobileNumber(): Promise<string> {
+    const count = await this.userRepository.count();
+    const number = String(1000000000 + count + 1); // Starts from 1000000001
+    return number;
   }
 
   // Generate name with initials
