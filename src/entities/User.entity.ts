@@ -1,7 +1,17 @@
 import { Gender } from '../enums/Gender.enum';
 import { Role } from '../enums/Role.enum';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn } from "typeorm";
-import { Center } from "./Center.entity";
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  BeforeInsert,
+  BeforeUpdate,
+} from 'typeorm';
+import { Center } from './Center.entity';
+import bcrypt from 'bcryptjs';
 
 @Entity()
 export class User {
@@ -11,7 +21,7 @@ export class User {
   @Column({ type: 'varchar', length: 100, unique: true })
   username: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ type: 'varchar', length: 255, select: false })
   password: string; // Hashed
 
   @Column({ type: 'varchar', length: 100, unique: true })
@@ -44,7 +54,7 @@ export class User {
   @Column({ type: 'text', nullable: true })
   address: string;
 
-  @Column({ type: 'varchar', length: 15 })
+  @Column({ type: 'varchar', length: 15, unique: true })
   mobileNumber: string;
 
   @Column({ type: 'varchar', length: 15, nullable: true })
@@ -59,7 +69,7 @@ export class User {
   @Column({ type: 'boolean', default: true })
   isActive: boolean;
 
-  @ManyToOne(() => Center, center => center.users)
+  @ManyToOne(() => Center, center => center.users, { nullable: true })
   center: Center;
 
   @CreateDateColumn()
@@ -67,4 +77,14 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  // Password hashing hooks
+  @BeforeInsert()
+  @BeforeUpdate()
+  async hashPassword() {
+    // Only hash if password exists and is not already hashed
+    if (this.password && !this.password.startsWith('$2a$') && !this.password.startsWith('$2b$')) {
+      this.password = await bcrypt.hash(this.password, 10);
+    }
+  }
 }
