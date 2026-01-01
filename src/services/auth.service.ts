@@ -70,6 +70,12 @@ export class AuthService {
       .where('user.email = :email', { email: data.email })
       .getOne();
 
+    console.log('User found:', !!user);
+    if (user) {
+      console.log('Password from DB:', user.password?.substring(0, 10) + '...');
+      console.log('Is active:', user.isActive);
+    }
+    
     if (!user) {
       throw new Error('Invalid email or password');
     }
@@ -79,7 +85,9 @@ export class AuthService {
     }
 
     // Validate password
+    console.log('Comparing passwords...');
     const isValidPassword = await bcrypt.compare(data.password, user.password);
+    console.log('Password valid:', isValidPassword);
 
     if (!isValidPassword) {
       throw new Error('Invalid email or password');
