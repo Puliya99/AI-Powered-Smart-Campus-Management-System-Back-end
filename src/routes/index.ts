@@ -3,9 +3,10 @@ import authRoutes from './auth.routes';
 import passwordResetRoutes from './password-reset.routes';
 import dashboardRoutes from './dashabord.routes';
 import studentRoutes from './student.routes';
+import lecturerRoutes from './lecturer.routes';
 import programRoutes from './program.routes';
 import moduleRoutes from './module.routes';
-import lecturerRoutes from './lecturer.routes';
+import batchRoutes from './batch.routes';
 
 const router = Router();
 
@@ -14,9 +15,10 @@ router.use('/auth', authRoutes);
 router.use('/password', passwordResetRoutes);
 router.use('/dashboard', dashboardRoutes);
 router.use('/students', studentRoutes);
+router.use('/lecturers', lecturerRoutes);
 router.use('/programs', programRoutes);
 router.use('/modules', moduleRoutes);
-router.use('/lecturers', lecturerRoutes);
+router.use('/batches', batchRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -46,39 +48,49 @@ router.get('/', (req, res) => {
         staff: 'GET /api/v1/dashboard/staff',
       },
       students: {
-        list: 'GET /api/v1/students',
-        stats: 'GET /api/v1/students/stats',
+        getAll: 'GET /api/v1/students',
+        getById: 'GET /api/v1/students/:id',
         create: 'POST /api/v1/students',
-        get: 'GET /api/v1/students/:id',
         update: 'PUT /api/v1/students/:id',
         delete: 'DELETE /api/v1/students/:id',
-      },
-      programs: {
-        list: 'GET /api/v1/programs',
-        dropdown: 'GET /api/v1/programs/dropdown',
-        stats: 'GET /api/v1/programs/stats',
-        create: 'POST /api/v1/programs',
-        get: 'GET /api/v1/programs/:id',
-        update: 'PUT /api/v1/programs/:id',
-        delete: 'DELETE /api/v1/programs/:id',
-      },
-      modules: {
-        list: 'GET /api/v1/modules',
-        dropdown: 'GET /api/v1/modules/dropdown',
-        stats: 'GET /api/v1/modules/stats',
-        create: 'POST /api/v1/modules',
-        get: 'GET /api/v1/modules/:id',
-        update: 'PUT /api/v1/modules/:id',
-        delete: 'DELETE /api/v1/modules/:id',
+        stats: 'GET /api/v1/students/stats',
       },
       lecturers: {
-        list: 'GET /api/v1/lecturers',
-        dropdown: 'GET /api/v1/lecturers/dropdown',
-        stats: 'GET /api/v1/lecturers/stats',
+        getAll: 'GET /api/v1/lecturers',
+        getById: 'GET /api/v1/lecturers/:id',
         create: 'POST /api/v1/lecturers',
-        get: 'GET /api/v1/lecturers/:id',
         update: 'PUT /api/v1/lecturers/:id',
         delete: 'DELETE /api/v1/lecturers/:id',
+        stats: 'GET /api/v1/lecturers/stats',
+        dropdown: 'GET /api/v1/lecturers/dropdown',
+      },
+      programs: {
+        getAll: 'GET /api/v1/programs',
+        getById: 'GET /api/v1/programs/:id',
+        create: 'POST /api/v1/programs',
+        update: 'PUT /api/v1/programs/:id',
+        delete: 'DELETE /api/v1/programs/:id',
+        stats: 'GET /api/v1/programs/stats',
+        dropdown: 'GET /api/v1/programs/dropdown',
+      },
+      modules: {
+        getAll: 'GET /api/v1/modules',
+        getById: 'GET /api/v1/modules/:id',
+        create: 'POST /api/v1/modules',
+        update: 'PUT /api/v1/modules/:id',
+        delete: 'DELETE /api/v1/modules/:id',
+        stats: 'GET /api/v1/modules/stats',
+        dropdown: 'GET /api/v1/modules/dropdown',
+      },
+      batches: {
+        getAll: 'GET /api/v1/batches',
+        getById: 'GET /api/v1/batches/:id',
+        create: 'POST /api/v1/batches',
+        update: 'PUT /api/v1/batches/:id',
+        delete: 'DELETE /api/v1/batches/:id',
+        stats: 'GET /api/v1/batches/stats',
+        dropdown: 'GET /api/v1/batches/dropdown',
+        enrollments: 'GET /api/v1/batches/:id/enrollments',
       },
     },
   });
