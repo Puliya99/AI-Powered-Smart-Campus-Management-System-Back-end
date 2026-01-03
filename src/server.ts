@@ -21,7 +21,7 @@ const startServer = async () => {
 ╔════════════════════════════════════════╗
 ║   🚀 Smart Campus API Server          ║
 ╠════════════════════════════════════════╣
-║   Environment: ${env.NODE_ENV.padEnd(23)}║
+║                                      ║
 ║   Port: ${PORT.toString().padEnd(30)}║
 ║   URL: http://localhost:${PORT}${' '.repeat(13)}║
 ║   Health: /health                     ║

@@ -40,17 +40,7 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(compression());
 
 // Logging Middleware
-if (env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-} else {
-  app.use(
-    morgan('combined', {
-      stream: {
-        write: (message: string) => logger.info(message.trim()),
-      },
-    })
-  );
-}
+app.use(morgan('dev'));
 
 // Root Route
 app.get('/', (req: Request, res: Response) => {
@@ -68,7 +58,6 @@ app.get('/health', (req: Request, res: Response) => {
     status: 'success',
     message: 'Smart Campus API is running',
     timestamp: new Date().toISOString(),
-    environment: env.NODE_ENV,
     uptime: process.uptime(),
   });
 });

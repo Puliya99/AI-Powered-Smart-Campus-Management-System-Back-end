@@ -1,44 +1,24 @@
 import { Router } from 'express';
-
-// Import route modules here when you create them
-// import authRoutes from './auth.routes';
-// import studentRoutes from './student.routes';
-// import lecturerRoutes from './lecturer.routes';
-// import programRoutes from './program.routes';
-// import moduleRoutes from './module.routes';
-// import batchRoutes from './batch.routes';
-// import enrollmentRoutes from './enrollment.routes';
-// import scheduleRoutes from './schedule.routes';
-// import attendanceRoutes from './attendance.routes';
-// import paymentRoutes from './payment.routes';
-// import assignmentRoutes from './assignment.routes';
-// import resultRoutes from './result.routes';
-// import feedbackRoutes from './feedback.routes';
-// import notificationRoutes from './notification.routes';
-// import dashboardRoutes from './dashboard.routes';
-// import aiRoutes from './ai.routes';
+import authRoutes from './auth.routes';
+import passwordResetRoutes from './password-reset.routes';
+import dashboardRoutes from './dashabord.routes';
+import studentRoutes from './student.routes';
+import programRoutes from './program.routes';
+import moduleRoutes from './module.routes';
+import lecturerRoutes from './lecturer.routes';
 
 const router = Router();
 
-// Register routes here when you create them
-// router.use('/auth', authRoutes);
-// router.use('/students', studentRoutes);
-// router.use('/lecturers', lecturerRoutes);
-// router.use('/programs', programRoutes);
-// router.use('/modules', moduleRoutes);
-// router.use('/batches', batchRoutes);
-// router.use('/enrollments', enrollmentRoutes);
-// router.use('/schedules', scheduleRoutes);
-// router.use('/attendance', attendanceRoutes);
-// router.use('/payments', paymentRoutes);
-// router.use('/assignments', assignmentRoutes);
-// router.use('/results', resultRoutes);
-// router.use('/feedback', feedbackRoutes);
-// router.use('/notifications', notificationRoutes);
-// router.use('/dashboard', dashboardRoutes);
-// router.use('/ai', aiRoutes);
+// Register routes
+router.use('/auth', authRoutes);
+router.use('/password', passwordResetRoutes);
+router.use('/dashboard', dashboardRoutes);
+router.use('/students', studentRoutes);
+router.use('/programs', programRoutes);
+router.use('/modules', moduleRoutes);
+router.use('/lecturers', lecturerRoutes);
 
-// Default API route
+// Default route
 router.get('/', (req, res) => {
   res.json({
     status: 'success',
@@ -46,22 +26,60 @@ router.get('/', (req, res) => {
     version: '1.0.0',
     endpoints: {
       health: '/health',
-      auth: '/api/v1/auth',
-      students: '/api/v1/students',
-      lecturers: '/api/v1/lecturers',
-      programs: '/api/v1/programs',
-      modules: '/api/v1/modules',
-      batches: '/api/v1/batches',
-      enrollments: '/api/v1/enrollments',
-      schedules: '/api/v1/schedules',
-      attendance: '/api/v1/attendance',
-      payments: '/api/v1/payments',
-      assignments: '/api/v1/assignments',
-      results: '/api/v1/results',
-      feedback: '/api/v1/feedback',
-      notifications: '/api/v1/notifications',
-      dashboard: '/api/v1/dashboard',
-      ai: '/api/v1/ai',
+      auth: {
+        register: 'POST /api/v1/auth/register',
+        login: 'POST /api/v1/auth/login',
+        me: 'GET /api/v1/auth/me',
+        changePassword: 'POST /api/v1/auth/change-password',
+        logout: 'POST /api/v1/auth/logout',
+      },
+      password: {
+        forgot: 'POST /api/v1/password/forgot-password',
+        verify: 'GET /api/v1/password/verify-token/:token',
+        reset: 'POST /api/v1/password/reset-password',
+      },
+      dashboard: {
+        get: 'GET /api/v1/dashboard',
+        admin: 'GET /api/v1/dashboard/admin',
+        student: 'GET /api/v1/dashboard/student',
+        lecturer: 'GET /api/v1/dashboard/lecturer',
+        staff: 'GET /api/v1/dashboard/staff',
+      },
+      students: {
+        list: 'GET /api/v1/students',
+        stats: 'GET /api/v1/students/stats',
+        create: 'POST /api/v1/students',
+        get: 'GET /api/v1/students/:id',
+        update: 'PUT /api/v1/students/:id',
+        delete: 'DELETE /api/v1/students/:id',
+      },
+      programs: {
+        list: 'GET /api/v1/programs',
+        dropdown: 'GET /api/v1/programs/dropdown',
+        stats: 'GET /api/v1/programs/stats',
+        create: 'POST /api/v1/programs',
+        get: 'GET /api/v1/programs/:id',
+        update: 'PUT /api/v1/programs/:id',
+        delete: 'DELETE /api/v1/programs/:id',
+      },
+      modules: {
+        list: 'GET /api/v1/modules',
+        dropdown: 'GET /api/v1/modules/dropdown',
+        stats: 'GET /api/v1/modules/stats',
+        create: 'POST /api/v1/modules',
+        get: 'GET /api/v1/modules/:id',
+        update: 'PUT /api/v1/modules/:id',
+        delete: 'DELETE /api/v1/modules/:id',
+      },
+      lecturers: {
+        list: 'GET /api/v1/lecturers',
+        dropdown: 'GET /api/v1/lecturers/dropdown',
+        stats: 'GET /api/v1/lecturers/stats',
+        create: 'POST /api/v1/lecturers',
+        get: 'GET /api/v1/lecturers/:id',
+        update: 'PUT /api/v1/lecturers/:id',
+        delete: 'DELETE /api/v1/lecturers/:id',
+      },
     },
   });
 });
