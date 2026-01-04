@@ -7,6 +7,10 @@ import lecturerRoutes from './lecturer.routes';
 import programRoutes from './program.routes';
 import moduleRoutes from './module.routes';
 import batchRoutes from './batch.routes';
+import scheduleRoutes from './schedule.routes';
+import attendanceRoutes from './attendance.routes';
+import centerRoutes from './center.routes';
+
 
 const router = Router();
 
@@ -19,6 +23,9 @@ router.use('/lecturers', lecturerRoutes);
 router.use('/programs', programRoutes);
 router.use('/modules', moduleRoutes);
 router.use('/batches', batchRoutes);
+router.use('/schedules', scheduleRoutes);
+router.use('/attendance', attendanceRoutes);
+router.use('/centers', centerRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -91,6 +98,36 @@ router.get('/', (req, res) => {
         stats: 'GET /api/v1/batches/stats',
         dropdown: 'GET /api/v1/batches/dropdown',
         enrollments: 'GET /api/v1/batches/:id/enrollments',
+      },
+      schedules: {
+        getAll: 'GET /api/v1/schedules',
+        getById: 'GET /api/v1/schedules/:id',
+        getByDate: 'GET /api/v1/schedules/date/:date',
+        getLecturerSchedule: 'GET /api/v1/schedules/lecturer/:lecturerId',
+        create: 'POST /api/v1/schedules',
+        update: 'PUT /api/v1/schedules/:id',
+        delete: 'DELETE /api/v1/schedules/:id',
+        stats: 'GET /api/v1/schedules/stats',
+      },
+      attendance: {
+        getAll: 'GET /api/v1/attendance',
+        getById: 'GET /api/v1/attendance/:id',
+        mark: 'POST /api/v1/attendance/mark',
+        update: 'PUT /api/v1/attendance/:id',
+        delete: 'DELETE /api/v1/attendance/:id',
+        stats: 'GET /api/v1/attendance/stats',
+        getScheduleAttendance: 'GET /api/v1/attendance/schedule/:scheduleId',
+        getStudentReport: 'GET /api/v1/attendance/student/:studentId/report',
+        getBatchSummary: 'GET /api/v1/attendance/batch/:batchId/summary',
+      },
+      centers: {
+        getAll: 'GET /api/v1/centers',
+        getById: 'GET /api/v1/centers/:id',
+        create: 'POST /api/v1/centers',
+        update: 'PUT /api/v1/centers/:id',
+        delete: 'DELETE /api/v1/centers/:id',
+        stats: 'GET /api/v1/centers/stats',
+        dropdown: 'GET /api/v1/centers/dropdown',
       },
     },
   });
