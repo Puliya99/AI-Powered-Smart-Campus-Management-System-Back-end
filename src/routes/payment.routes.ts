@@ -1,0 +1,63 @@
+import { Router } from 'express';
+import paymentController from '../controllers/payment.controller';
+import authMiddleware from '../middleware/auth.middleware';
+import { Role } from '../enums/Role.enum';
+
+const router = Router();
+
+// All routes require authentication
+router.use(authMiddleware.authenticate.bind(authMiddleware));
+
+// Get all payments (Admin and Staff)
+router.get(
+  '/',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  paymentController.getAllPayments.bind(paymentController)
+);
+
+// Get payment statistics (Admin)
+router.get(
+  '/stats',
+  authMiddleware.authorize(Role.ADMIN),
+  paymentController.getPaymentStats.bind(paymentController)
+);
+
+// Get payment by ID (Admin, Staff, and own student)
+router.get('/:id', paymentController.getPaymentById.bind(paymentController));
+
+// Get student payments (Student own payments)
+router.get(
+  '/student',
+  authMiddleware.authorize(Role.STUDENT),
+  paymentController.getStudentPayments.bind(paymentController)
+);
+
+// Create payment (Admin and Staff)
+router.post(
+  '/',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  paymentController.createPayment.bind(paymentController)
+);
+
+// Update payment (Admin and Staff)
+router.put(
+  '/:id',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  paymentController.updatePayment.bind(paymentController)
+);
+
+// Delete payment (Admin only)
+router.delete(
+  '/:id',
+  authMiddleware.authorize(Role.ADMIN),
+  paymentController.deletePayment.bind(paymentController)
+);
+
+// Upload receipt (Student)
+router.post(
+  '/:paymentId/receipt',
+  authMiddleware.authorize(Role.STUDENT),
+  paymentController.uploadReceipt.bind(paymentController)
+);
+
+export default router;
