@@ -38,8 +38,7 @@ export class Payment {
   transactionId: string;
 
   @Column({ type: 'date', nullable: true })
-  nextPaymentDate: Date;
-
+  nextPaymentDate: Date | null;
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   outstanding: number;
 
