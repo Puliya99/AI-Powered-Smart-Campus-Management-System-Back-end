@@ -22,6 +22,13 @@ router.get(
   studentController.getStudentStats.bind(studentController)
 );
 
+// Get students dropdown (Admin and Staff only)
+router.get(
+  '/dropdown',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  studentController.getStudentsDropdown.bind(studentController)
+);
+
 // Get student by ID (Admin, Staff, and own student)
 router.get('/:id', studentController.getStudentById.bind(studentController));
 
