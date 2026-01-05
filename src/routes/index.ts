@@ -10,6 +10,7 @@ import batchRoutes from './batch.routes';
 import scheduleRoutes from './schedule.routes';
 import attendanceRoutes from './attendance.routes';
 import centerRoutes from './center.routes';
+import paymentRoutes from './payment.routes';
 
 
 const router = Router();
@@ -26,6 +27,7 @@ router.use('/batches', batchRoutes);
 router.use('/schedules', scheduleRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/centers', centerRoutes);
+router.use('/payments', paymentRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -61,6 +63,7 @@ router.get('/', (req, res) => {
         update: 'PUT /api/v1/students/:id',
         delete: 'DELETE /api/v1/students/:id',
         stats: 'GET /api/v1/students/stats',
+        dropdown: 'GET /api/v1/students/dropdown',
       },
       lecturers: {
         getAll: 'GET /api/v1/lecturers',
@@ -128,6 +131,16 @@ router.get('/', (req, res) => {
         delete: 'DELETE /api/v1/centers/:id',
         stats: 'GET /api/v1/centers/stats',
         dropdown: 'GET /api/v1/centers/dropdown',
+      },
+      payments: {
+        getAll: 'GET /api/v1/payments',
+        getById: 'GET /api/v1/payments/:id',
+        create: 'POST /api/v1/payments',
+        update: 'PUT /api/v1/payments/:id',
+        delete: 'DELETE /api/v1/payments/:id',
+        stats: 'GET /api/v1/payments/stats',
+        getStudentPayments: 'GET /api/v1/payments/student',
+        uploadReceipt: 'POST /api/v1/payments/:paymentId/receipt',
       },
     },
   });

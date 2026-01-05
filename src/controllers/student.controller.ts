@@ -314,6 +314,33 @@ export class StudentController {
     const number = String(count + 1).padStart(5, '0');
     return `UNI${year}${number}`;
   }
+  // Get students dropdown (for forms)
+  async getStudentsDropdown(req: Request, res: Response) {
+    try {
+      const students = await this.studentRepository
+        .createQueryBuilder('student')
+        .leftJoinAndSelect('student.user', 'user')
+        .where('user.isActive = :isActive', { isActive: true })
+        .select([
+          'student.id',
+          'student.universityNumber',
+          'user.firstName',
+          'user.lastName',
+        ])
+        .orderBy('user.firstName', 'ASC')
+        .getMany();
+
+      res.json({
+        status: 'success',
+        data: { students },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch students',
+      });
+    }
+  }
 }
 
 export default new StudentController();
