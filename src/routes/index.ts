@@ -12,6 +12,7 @@ import attendanceRoutes from './attendance.routes';
 import centerRoutes from './center.routes';
 import paymentRoutes from './payment.routes';
 import reportRoutes from './report.routes';
+import settingRoutes from './setting.routes';
 
 const router = Router();
 
@@ -29,6 +30,7 @@ router.use('/attendance', attendanceRoutes);
 router.use('/centers', centerRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/reports', reportRoutes);
+router.use('/settings', settingRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -148,6 +150,13 @@ router.get('/', (req, res) => {
         payment: 'GET /api/v1/reports/payment',
         attendance: 'GET /api/v1/reports/attendance',
         stats: 'GET /api/v1/reports/stats',
+      },
+      settings: {
+        getAll: 'GET /api/v1/settings',
+        getByKey: 'GET /api/v1/settings/:key',
+        upsert: 'POST /api/v1/settings',
+        updateMultiple: 'PUT /api/v1/settings/bulk',
+        delete: 'DELETE /api/v1/settings/:id',
       },
     },
   });
