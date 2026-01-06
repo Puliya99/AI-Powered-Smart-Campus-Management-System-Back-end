@@ -147,6 +147,49 @@ export class AuthService {
     return { message: 'Password changed successfully' };
   }
 
+  // Update user profile
+  async updateProfile(userId: string, data: any) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+      'firstName',
+      'lastName',
+      'title',
+      'gender',
+      'dateOfBirth',
+      'address',
+      'mobileNumber',
+      'homeNumber',
+      'profilePic',
+    ];
+
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        (user as any)[field] = data[field];
+      }
+    });
+
+    // Update name with initials if names changed
+    if (data.firstName || data.lastName) {
+      user.nameWithInitials = this.generateNameWithInitials(
+        user.firstName,
+        user.lastName
+      );
+    }
+
+    await this.userRepository.save(user);
+
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
+  }
+
   // Logout (token invalidation would be handled client-side or with Redis)
   async logout() {
     return { message: 'Logged out successfully' };
