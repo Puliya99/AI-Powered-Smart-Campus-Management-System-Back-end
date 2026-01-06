@@ -11,7 +11,7 @@ import scheduleRoutes from './schedule.routes';
 import attendanceRoutes from './attendance.routes';
 import centerRoutes from './center.routes';
 import paymentRoutes from './payment.routes';
-
+import reportRoutes from './report.routes';
 
 const router = Router();
 
@@ -28,6 +28,7 @@ router.use('/schedules', scheduleRoutes);
 router.use('/attendance', attendanceRoutes);
 router.use('/centers', centerRoutes);
 router.use('/payments', paymentRoutes);
+router.use('/reports', reportRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -141,6 +142,12 @@ router.get('/', (req, res) => {
         stats: 'GET /api/v1/payments/stats',
         getStudentPayments: 'GET /api/v1/payments/student',
         uploadReceipt: 'POST /api/v1/payments/:paymentId/receipt',
+      },
+      reports: {
+        enrollment: 'GET /api/v1/reports/enrollment',
+        payment: 'GET /api/v1/reports/payment',
+        attendance: 'GET /api/v1/reports/attendance',
+        stats: 'GET /api/v1/reports/stats',
       },
     },
   });
