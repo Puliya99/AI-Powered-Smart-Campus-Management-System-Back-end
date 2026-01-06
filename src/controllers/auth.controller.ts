@@ -121,6 +121,25 @@ export class AuthController {
     }
   }
 
+  // Update profile
+  async updateProfile(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const user = await authService.updateProfile(userId, req.body);
+
+      res.json({
+        status: 'success',
+        message: 'Profile updated successfully',
+        data: { user },
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        status: 'error',
+        message: error.message || 'Profile update failed',
+      });
+    }
+  }
+
   // Logout
   async logout(req: Request, res: Response) {
     try {

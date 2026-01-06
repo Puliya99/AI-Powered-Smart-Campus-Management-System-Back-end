@@ -21,6 +21,12 @@ router.post(
   authController.changePassword.bind(authController)
 );
 
+router.put(
+  '/profile',
+  authMiddleware.authenticate.bind(authMiddleware),
+  authController.updateProfile.bind(authController)
+);
+
 router.post(
   '/logout',
   authMiddleware.authenticate.bind(authMiddleware),
