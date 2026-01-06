@@ -38,6 +38,18 @@ async function seedSettings() {
         description: 'Maximum number of students allowed in a single batch',
         type: 'number',
       },
+      {
+        key: 'profile_picture_download',
+        value: JSON.stringify({
+          ADMIN: true,
+          USER: false,
+          LECTURER: false,
+          STUDENT: false
+        }),
+        group: 'user_permission',
+        description: 'Allow users to download profile pictures based on roles',
+        type: 'json',
+      },
     ];
 
     for (const s of initialSettings) {
@@ -46,6 +58,13 @@ async function seedSettings() {
         const setting = settingRepository.create(s);
         await settingRepository.save(setting);
         console.log(`Seeded setting: ${s.key}`);
+      } else if (s.group === 'user_permission') {
+        // Force update for user permissions to ensure JSON structure
+        exists.value = s.value;
+        exists.type = s.type;
+        exists.description = s.description;
+        await settingRepository.save(exists);
+        console.log(`Updated setting: ${s.key}`);
       }
     }
 
