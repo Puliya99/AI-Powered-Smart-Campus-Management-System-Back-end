@@ -13,6 +13,7 @@ import centerRoutes from './center.routes';
 import paymentRoutes from './payment.routes';
 import reportRoutes from './report.routes';
 import settingRoutes from './setting.routes';
+import userRoutes from './user.routes';
 
 const router = Router();
 
@@ -31,6 +32,7 @@ router.use('/centers', centerRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/reports', reportRoutes);
 router.use('/settings', settingRoutes);
+router.use('/users', userRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -157,6 +159,14 @@ router.get('/', (req, res) => {
         upsert: 'POST /api/v1/settings',
         updateMultiple: 'PUT /api/v1/settings/bulk',
         delete: 'DELETE /api/v1/settings/:id',
+      },
+      users: {
+        getAll: 'GET /api/v1/users',
+        getById: 'GET /api/v1/users/:id',
+        create: 'POST /api/v1/users',
+        update: 'PUT /api/v1/users/:id',
+        delete: 'DELETE /api/v1/users/:id',
+        stats: 'GET /api/v1/users/stats',
       },
     },
   });
