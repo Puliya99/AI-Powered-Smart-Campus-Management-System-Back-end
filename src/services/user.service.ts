@@ -11,7 +11,7 @@ export class UserService {
     page?: number;
     limit?: number;
     search?: string;
-    role?: Role;
+    role?: Role | Role[];
     isActive?: boolean;
     centerId?: string;
   }) {
@@ -33,7 +33,11 @@ export class UserService {
     }
 
     if (role) {
-      queryBuilder.andWhere('user.role = :role', { role });
+      if (Array.isArray(role)) {
+        queryBuilder.andWhere('user.role IN (:...roles)', { roles: role });
+      } else {
+        queryBuilder.andWhere('user.role = :role', { role });
+      }
     }
 
     if (isActive !== undefined) {
@@ -98,11 +102,35 @@ export class UserService {
       userData.nameWithInitials = this.generateNameWithInitials(userData.firstName, userData.lastName);
     }
 
-    const user = this.userRepository.create(userData);
-    await this.userRepository.save(user);
+    // Handle center relation
+    if (userData.centerId) {
+      userData.center = { id: userData.centerId };
+    }
 
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    try {
+      const user = this.userRepository.create(userData);
+      await this.userRepository.save(user);
+
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    } catch (error: any) {
+      if (error.code === '23505') { // Postgres unique_violation
+        const detail = error.detail || '';
+        if (detail.includes('email')) throw new Error('Email already registered');
+        if (detail.includes('username')) throw new Error('Username already taken');
+        if (detail.includes('nic')) throw new Error('NIC already registered');
+        if (detail.includes('mobileNumber')) throw new Error('Mobile number already registered');
+        if (detail.includes('registrationNumber')) {
+          // Retry once with a different registration number if it failed
+          userData.registrationNumber = await this.generateRegistrationNumber(true);
+          const user = this.userRepository.create(userData);
+          await this.userRepository.save(user);
+          const { password, ...userWithoutPassword } = user;
+          return userWithoutPassword;
+        }
+      }
+      throw error;
+    }
   }
 
   // Update user
@@ -141,11 +169,28 @@ export class UserService {
       );
     }
 
-    Object.assign(user, userData);
-    await this.userRepository.save(user);
+    // Handle center relation update
+    if (userData.centerId !== undefined) {
+      userData.center = userData.centerId ? { id: userData.centerId } : null;
+    }
 
-    const { password, ...userWithoutPassword } = user;
-    return userWithoutPassword;
+    try {
+      Object.assign(user, userData);
+      await this.userRepository.save(user);
+
+      const { password, ...userWithoutPassword } = user;
+      return userWithoutPassword;
+    } catch (error: any) {
+      if (error.code === '23505') {
+        const detail = error.detail || '';
+        if (detail.includes('email')) throw new Error('Email already registered');
+        if (detail.includes('username')) throw new Error('Username already taken');
+        if (detail.includes('nic')) throw new Error('NIC already registered');
+        if (detail.includes('mobileNumber')) throw new Error('Mobile number already registered');
+        if (detail.includes('registrationNumber')) throw new Error('Registration number already exists');
+      }
+      throw error;
+    }
   }
 
   // Delete user
@@ -160,12 +205,15 @@ export class UserService {
 
   // Get user statistics
   async getUserStats() {
-    const totalUsers = await this.userRepository.count();
-    const activeUsers = await this.userRepository.count({ where: { isActive: true } });
     const adminCount = await this.userRepository.count({ where: { role: Role.ADMIN } });
-    const lecturerCount = await this.userRepository.count({ where: { role: Role.LECTURER } });
-    const studentCount = await this.userRepository.count({ where: { role: Role.STUDENT } });
     const staffCount = await this.userRepository.count({ where: { role: Role.USER } });
+    const totalUsers = adminCount + staffCount;
+    const activeUsers = await this.userRepository.count({ 
+      where: [
+        { role: Role.ADMIN, isActive: true },
+        { role: Role.USER, isActive: true }
+      ]
+    });
 
     return {
       totalUsers,
@@ -173,8 +221,6 @@ export class UserService {
       inactiveUsers: totalUsers - activeUsers,
       roles: {
         ADMIN: adminCount,
-        LECTURER: lecturerCount,
-        STUDENT: studentCount,
         STAFF: staffCount,
       },
     };
@@ -183,9 +229,25 @@ export class UserService {
   // Helpers
   private async generateRegistrationNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.userRepository.count();
-    const number = String(count + 1).padStart(4, '0');
-    return `REG${year}${number}`;
+    const prefix = `REG${year}`;
+    
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.registrationNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('user.registrationNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.registrationNumber) {
+      const lastNumberStr = lastUser.registrationNumber.substring(prefix.length);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(4, '0');
+    return `${prefix}${number}`;
   }
 
   private generateNameWithInitials(firstName: string, lastName: string): string {
