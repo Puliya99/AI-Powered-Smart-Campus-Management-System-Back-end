@@ -18,12 +18,15 @@ export class ReportController {
   // Enrollment Report
   async getEnrollmentReport(req: Request, res: Response) {
     try {
-      const report = await this.enrollmentRepository
+      const { centerId } = req.query;
+
+      const queryBuilder = this.enrollmentRepository
         .createQueryBuilder('enrollment')
         .leftJoinAndSelect('enrollment.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('enrollment.batch', 'batch')
         .leftJoinAndSelect('batch.program', 'program')
+        .leftJoin('batch.centers', 'center')
         .select([
           'enrollment.id',
           'enrollment.enrollmentDate',
@@ -31,10 +34,15 @@ export class ReportController {
           'student.id',
           'user.firstName',
           'user.lastName',
-          'batch.batchName',
+          'batch.batchNumber',
           'program.programName',
-        ])
-        .getMany();
+        ]);
+
+      if (centerId) {
+        queryBuilder.andWhere('center.id = :centerId', { centerId });
+      }
+
+      const report = await queryBuilder.getMany();
 
       res.json({
         status: 'success',
@@ -51,19 +59,24 @@ export class ReportController {
   // Payment Report
   async getPaymentReport(req: Request, res: Response) {
     try {
-      const { startDate, endDate } = req.query;
+      const { startDate, endDate, centerId } = req.query;
 
       const queryBuilder = this.paymentRepository
         .createQueryBuilder('payment')
         .leftJoinAndSelect('payment.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
-        .leftJoinAndSelect('payment.program', 'program');
+        .leftJoinAndSelect('payment.program', 'program')
+        .leftJoinAndSelect('payment.center', 'center');
 
       if (startDate && endDate) {
         queryBuilder.where('payment.paymentDate BETWEEN :startDate AND :endDate', {
           startDate,
           endDate,
         });
+      }
+
+      if (centerId) {
+        queryBuilder.andWhere('payment.center = :centerId', { centerId });
       }
 
       const report = await queryBuilder.getMany();
@@ -83,7 +96,7 @@ export class ReportController {
   // Attendance Report
   async getAttendanceReport(req: Request, res: Response) {
     try {
-      const { batchId } = req.query;
+      const { batchId, centerId } = req.query;
 
       const queryBuilder = this.attendanceRepository
         .createQueryBuilder('attendance')
@@ -91,10 +104,15 @@ export class ReportController {
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('attendance.schedule', 'schedule')
         .leftJoinAndSelect('schedule.batch', 'batch')
-        .leftJoinAndSelect('schedule.module', 'module');
+        .leftJoinAndSelect('schedule.module', 'module')
+        .leftJoinAndSelect('schedule.center', 'center');
 
       if (batchId) {
         queryBuilder.where('batch.id = :batchId', { batchId });
+      }
+
+      if (centerId) {
+        queryBuilder.andWhere('center.id = :centerId', { centerId });
       }
 
       const report = await queryBuilder.getMany();
@@ -114,12 +132,25 @@ export class ReportController {
   // Summary Stats for Reports
   async getReportStats(req: Request, res: Response) {
     try {
-      const totalStudents = await this.studentRepository.count();
-      const totalPrograms = await this.programRepository.count();
-      const totalBatches = await this.batchRepository.count();
+      const { centerId } = req.query;
+
+      const studentQuery = this.studentRepository.createQueryBuilder('student');
+      const programQuery = this.programRepository.createQueryBuilder('program');
+      const batchQuery = this.batchRepository.createQueryBuilder('batch');
+      const paymentQuery = this.paymentRepository.createQueryBuilder('payment');
+
+      if (centerId) {
+        studentQuery.leftJoin('student.user', 'user').where('user.center = :centerId', { centerId });
+        programQuery.leftJoin('program.centers', 'center').where('center.id = :centerId', { centerId });
+        batchQuery.leftJoin('batch.centers', 'center').where('center.id = :centerId', { centerId });
+        paymentQuery.andWhere('payment.center = :centerId', { centerId });
+      }
+
+      const totalStudents = await studentQuery.getCount();
+      const totalPrograms = await programQuery.getCount();
+      const totalBatches = await batchQuery.getCount();
       
-      const paymentStats = await this.paymentRepository
-        .createQueryBuilder('payment')
+      const paymentStats = await paymentQuery
         .select('SUM(payment.amount)', 'totalRevenue')
         .getRawOne();
 
