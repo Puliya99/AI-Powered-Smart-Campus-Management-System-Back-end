@@ -3,11 +3,14 @@ import { AppDataSource } from '../config/database';
 import { Program } from '../entities/Program.entity';
 import { Module } from '../entities/Module.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
+import { Center } from '../entities/Center.entity';
+import { In } from 'typeorm';
 
 export class ProgramController {
   private programRepository = AppDataSource.getRepository(Program);
   private moduleRepository = AppDataSource.getRepository(Module);
   private enrollmentRepository = AppDataSource.getRepository(Enrollment);
+  private centerRepository = AppDataSource.getRepository(Center);
 
   // Get all programs with pagination and filters
   async getAllPrograms(req: Request, res: Response) {
@@ -18,6 +21,7 @@ export class ProgramController {
         search = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
+        centerId = '',
       } = req.query;
 
       const skip = (Number(page) - 1) * Number(limit);
@@ -27,16 +31,22 @@ export class ProgramController {
         .leftJoinAndSelect('program.modules', 'modules')
         .leftJoinAndSelect('program.batches', 'batches')
         .leftJoinAndSelect('program.enrollments', 'enrollments')
+        .leftJoinAndSelect('program.centers', 'centers')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`program.${sortBy}`, sortOrder as 'ASC' | 'DESC');
 
       // Search filter
       if (search) {
-        queryBuilder.where(
+        queryBuilder.andWhere(
           '(program.programName ILIKE :search OR program.programCode ILIKE :search OR program.description ILIKE :search)',
           { search: `%${search}%` }
         );
+      }
+
+      // Center filter
+      if (centerId) {
+        queryBuilder.andWhere('centers.id = :centerId', { centerId });
       }
 
       const [programs, total] = await queryBuilder.getManyAndCount();
@@ -97,6 +107,7 @@ export class ProgramController {
           'enrollments',
           'enrollments.student',
           'enrollments.student.user',
+          'centers',
         ],
       });
 
@@ -136,7 +147,7 @@ export class ProgramController {
   // Create new program
   async createProgram(req: Request, res: Response) {
     try {
-      const { programCode, programName, duration, programFee, description } = req.body;
+      const { programCode, programName, duration, programFee, description, centerIds } = req.body;
 
       // Check if program code already exists
       const existingProgram = await this.programRepository.findOne({
@@ -150,6 +161,14 @@ export class ProgramController {
         });
       }
 
+      // Fetch centers if centerIds provided
+      let centers: Center[] = [];
+      if (centerIds && Array.isArray(centerIds) && centerIds.length > 0) {
+        centers = await this.centerRepository.find({
+          where: { id: In(centerIds) }
+        });
+      }
+
       // Create program
       const program = this.programRepository.create({
         programCode,
@@ -157,6 +176,7 @@ export class ProgramController {
         duration,
         programFee,
         description,
+        centers,
       });
 
       await this.programRepository.save(program);
@@ -178,10 +198,11 @@ export class ProgramController {
   async updateProgram(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { programCode, programName, duration, programFee, description } = req.body;
+      const { programCode, programName, duration, programFee, description, centerIds } = req.body;
 
       const program = await this.programRepository.findOne({
         where: { id },
+        relations: ['centers'],
       });
 
       if (!program) {
@@ -211,6 +232,14 @@ export class ProgramController {
       if (duration) program.duration = duration;
       if (programFee !== undefined) program.programFee = programFee;
       if (description !== undefined) program.description = description;
+
+      // Update centers if centerIds provided
+      if (centerIds && Array.isArray(centerIds)) {
+        const centers = await this.centerRepository.find({
+          where: { id: In(centerIds) }
+        });
+        program.centers = centers;
+      }
 
       await this.programRepository.save(program);
 
