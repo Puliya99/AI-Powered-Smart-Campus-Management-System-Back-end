@@ -6,11 +6,17 @@ export class UserController {
   async getAllUsers(req: Request, res: Response) {
     try {
       const { page, limit, search, role, isActive, centerId } = req.query;
+      
+      let roles: any = role;
+      if (role && typeof role === 'string' && role.includes(',')) {
+        roles = role.split(',');
+      }
+
       const result = await userService.getAllUsers({
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
         search: search as string,
-        role: role as any,
+        role: roles,
         isActive: isActive !== undefined ? isActive === 'true' : undefined,
         centerId: centerId as string,
       });
