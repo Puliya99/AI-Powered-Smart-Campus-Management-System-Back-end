@@ -4,16 +4,13 @@ import { Batch } from '../entities/Batch.entity';
 import { Program } from '../entities/Program.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Schedule } from '../entities/Schedule.entity';
-import { Center } from '../entities/Center.entity';
 import { BatchStatus } from '../enums/BatchStatus.enum';
-import { In } from 'typeorm';
 
 export class BatchController {
   private batchRepository = AppDataSource.getRepository(Batch);
   private programRepository = AppDataSource.getRepository(Program);
   private enrollmentRepository = AppDataSource.getRepository(Enrollment);
   private scheduleRepository = AppDataSource.getRepository(Schedule);
-  private centerRepository = AppDataSource.getRepository(Center);
 
   // Get all batches with pagination and filters
   async getAllBatches(req: Request, res: Response) {
@@ -24,7 +21,6 @@ export class BatchController {
         search = '',
         programId = '',
         status = '',
-        centerId = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
       } = req.query;
@@ -36,7 +32,6 @@ export class BatchController {
         .leftJoinAndSelect('batch.program', 'program')
         .leftJoinAndSelect('batch.enrollments', 'enrollments')
         .leftJoinAndSelect('batch.schedules', 'schedules')
-        .leftJoinAndSelect('batch.centers', 'centers')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`batch.${sortBy}`, sortOrder as 'ASC' | 'DESC');
@@ -57,11 +52,6 @@ export class BatchController {
       // Status filter
       if (status) {
         queryBuilder.andWhere('batch.status = :status', { status });
-      }
-
-      // Center filter
-      if (centerId) {
-        queryBuilder.andWhere('centers.id = :centerId', { centerId });
       }
 
       const [batches, total] = await queryBuilder.getManyAndCount();
@@ -128,7 +118,6 @@ export class BatchController {
           'schedules.module',
           'schedules.lecturer',
           'schedules.lecturer.user',
-          'centers',
         ],
       });
 
@@ -170,7 +159,7 @@ export class BatchController {
   // Create new batch
   async createBatch(req: Request, res: Response) {
     try {
-      const { batchNumber, startDate, endDate, programId, status, centerIds } = req.body;
+      const { batchNumber, startDate, endDate, programId, status } = req.body;
 
       // Check if batch number already exists
       const existingBatch = await this.batchRepository.findOne({
@@ -207,26 +196,15 @@ export class BatchController {
         });
       }
 
-      // Fetch centers if centerIds provided
-      let centers: Center[] = [];
-      if (centerIds && Array.isArray(centerIds) && centerIds.length > 0) {
-        centers = await this.centerRepository.find({
-          where: { id: In(centerIds) }
-        });
-      }
-
       // Create batch
       const batch = this.batchRepository.create({
         batchNumber,
         startDate: start,
         endDate: end || undefined,
-        program,
-        centers,
         status: status || BatchStatus.UPCOMING,
       });
 
       batch.program = program;
-      // batch.centers = centers; // already set in create()
 
       await this.batchRepository.save(batch);
 
@@ -253,11 +231,11 @@ export class BatchController {
   async updateBatch(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const { batchNumber, startDate, endDate, programId, status, centerIds } = req.body;
+      const { batchNumber, startDate, endDate, programId, status } = req.body;
 
       const batch = await this.batchRepository.findOne({
         where: { id },
-        relations: ['program', 'centers'],
+        relations: ['program'],
       });
 
       if (!batch) {
@@ -315,20 +293,12 @@ export class BatchController {
         batch.program = program;
       }
 
-      // Update centers if provided
-      if (centerIds && Array.isArray(centerIds)) {
-        const centers = await this.centerRepository.find({
-          where: { id: In(centerIds) }
-        });
-        batch.centers = centers;
-      }
-
       await this.batchRepository.save(batch);
 
       // Fetch complete batch with relations
       const updatedBatch = await this.batchRepository.findOne({
         where: { id: batch.id },
-        relations: ['program', 'centers'],
+        relations: ['program'],
       });
 
       res.json({
@@ -449,13 +419,7 @@ export class BatchController {
       const queryBuilder = this.batchRepository
         .createQueryBuilder('batch')
         .leftJoinAndSelect('batch.program', 'program')
-        .select([
-          'batch.id',
-          'batch.batchNumber',
-          'batch.startDate',
-          'batch.status',
-          'program.id',
-        ])
+        .select(['batch.id', 'batch.batchNumber', 'batch.startDate', 'batch.status'])
         .orderBy('batch.startDate', 'DESC');
 
       if (programId) {

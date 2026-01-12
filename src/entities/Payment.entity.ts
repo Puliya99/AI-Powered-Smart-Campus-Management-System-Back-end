@@ -11,7 +11,6 @@ import { PaymentMethod } from '../enums/PaymentMethod.enum';
 import { PaymentStatus } from '../enums/PaymentStatus.enum';
 import { Program } from './Program.entity';
 import { Student } from './Student.entity';
-import { Center } from './Center.entity';
 
 @Entity('payments')
 export class Payment {
@@ -25,10 +24,6 @@ export class Payment {
   @ManyToOne(() => Program, program => program.payments)
   @JoinColumn({ name: 'program_id' })
   program: Program;
-
-  @ManyToOne(() => Center)
-  @JoinColumn({ name: 'center_id' })
-  center: Center;
 
   @Column({ type: 'date' })
   paymentDate: Date;

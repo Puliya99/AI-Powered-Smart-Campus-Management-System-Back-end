@@ -18,9 +18,6 @@ router.get(
 // Get lecturers dropdown (for forms)
 router.get('/dropdown', lecturerController.getLecturersDropdown.bind(lecturerController));
 
-// Get current lecturer profile
-router.get('/profile/me', lecturerController.getCurrentLecturerProfile.bind(lecturerController));
-
 // Get lecturer statistics (Admin only)
 router.get(
   '/stats',

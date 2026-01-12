@@ -2,8 +2,6 @@ import { Entity, PrimaryGeneratedColumn, Column, OneToMany, ManyToMany, JoinTabl
 import { Lecturer } from "./Lecturer.entity";
 import { Schedule } from "./Schedule.entity";
 import { User } from "./User.entity";
-import { Program } from "./Program.entity";
-import { Batch } from "./Batch.entity";
 
 @Entity()
 export class Center {
@@ -31,12 +29,6 @@ export class Center {
   @ManyToMany(() => Lecturer, lecturer => lecturer.centers)
   @JoinTable()
   lecturers: Lecturer[];
-
-  @ManyToMany(() => Program, program => program.centers)
-  programs: Program[];
-
-  @ManyToMany(() => Batch, batch => batch.centers)
-  batches: Batch[];
 
   @OneToMany(() => Schedule, schedule => schedule.center)
   schedules: Schedule[];

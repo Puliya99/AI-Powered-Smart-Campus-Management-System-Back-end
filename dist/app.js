@@ -14,6 +14,7 @@ const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const env_1 = require("./config/env");
 const routes_1 = __importDefault(require("./routes"));
 const error_middleware_1 = require("./middleware/error.middleware");
+const logger_1 = require("./utils/logger");
 const app = (0, express_1.default)();
 app.use((0, helmet_1.default)());
 app.use((0, cors_1.default)({
@@ -31,7 +32,16 @@ app.use('/api', limiter);
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true, limit: '10mb' }));
 app.use((0, compression_1.default)());
-app.use((0, morgan_1.default)('dev'));
+if (env_1.env.NODE_ENV === 'development') {
+    app.use((0, morgan_1.default)('dev'));
+}
+else {
+    app.use((0, morgan_1.default)('combined', {
+        stream: {
+            write: (message) => logger_1.logger.info(message.trim()),
+        },
+    }));
+}
 app.get('/', (req, res) => {
     res.json({
         status: 'success',
@@ -45,6 +55,7 @@ app.get('/health', (req, res) => {
         status: 'success',
         message: 'Smart Campus API is running',
         timestamp: new Date().toISOString(),
+        environment: env_1.env.NODE_ENV,
         uptime: process.uptime(),
     });
 });

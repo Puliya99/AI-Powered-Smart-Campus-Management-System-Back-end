@@ -38,21 +38,14 @@ export class CenterController {
       const [centers, total] = await queryBuilder.getManyAndCount();
 
       // Add statistics for each center
-      const centersWithStats = centers.map(center => {
-        const studentCount = center.users?.filter(u => u.role === 'STUDENT').length || 0;
-        const adminStaffCount = center.users?.filter(u => u.role === 'ADMIN' || u.role === 'USER').length || 0;
-        const lecturerCount = center.users?.filter(u => u.role === 'LECTURER').length || 0;
-
-        return {
-          ...center,
-          stats: {
-            userCount: adminStaffCount,
-            studentCount: studentCount,
-            lecturerCount: lecturerCount,
-            scheduleCount: center.schedules?.length || 0,
-          },
-        };
-      });
+      const centersWithStats = centers.map(center => ({
+        ...center,
+        stats: {
+          userCount: center.users?.length || 0,
+          lecturerCount: center.lecturers?.length || 0,
+          scheduleCount: center.schedules?.length || 0,
+        },
+      }));
 
       res.json({
         status: 'success',
@@ -91,24 +84,9 @@ export class CenterController {
         });
       }
 
-      // Add statistics
-      const studentCount = center.users?.filter(u => u.role === 'STUDENT').length || 0;
-      const adminStaffCount = center.users?.filter(u => u.role === 'ADMIN' || u.role === 'USER').length || 0;
-      const lecturerCount = center.users?.filter(u => u.role === 'LECTURER').length || 0;
-
-      const centerWithStats = {
-        ...center,
-        stats: {
-          userCount: adminStaffCount,
-          studentCount: studentCount,
-          lecturerCount: lecturerCount,
-          scheduleCount: center.schedules?.length || 0,
-        },
-      };
-
       res.json({
         status: 'success',
-        data: { center: centerWithStats },
+        data: { center },
       });
     } catch (error: any) {
       res.status(500).json({
@@ -265,18 +243,12 @@ export class CenterController {
       });
 
       let totalUsers = 0;
-      let totalStudents = 0;
       let totalLecturers = 0;
       let totalSchedules = 0;
 
       centers.forEach(center => {
-        const students = center.users?.filter(u => u.role === 'STUDENT').length || 0;
-        const adminStaff = center.users?.filter(u => u.role === 'ADMIN' || u.role === 'USER').length || 0;
-        const lecturers = center.users?.filter(u => u.role === 'LECTURER').length || 0;
-        
-        totalUsers += adminStaff;
-        totalStudents += students;
-        totalLecturers += lecturers;
+        totalUsers += center.users?.length || 0;
+        totalLecturers += center.lecturers?.length || 0;
         totalSchedules += center.schedules?.length || 0;
       });
 
@@ -285,7 +257,6 @@ export class CenterController {
         data: {
           totalCenters,
           totalUsers,
-          totalStudents,
           totalLecturers,
           totalSchedules,
         },

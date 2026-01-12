@@ -3,7 +3,6 @@ import { AppDataSource } from '../config/database';
 import { Payment } from '../entities/Payment.entity';
 import { Student } from '../entities/Student.entity';
 import { Program } from '../entities/Program.entity';
-import { Center } from '../entities/Center.entity';
 import { PaymentMethod } from '../enums/PaymentMethod.enum';
 import { PaymentStatus } from '../enums/PaymentStatus.enum';
 import { uploadSingle } from '../middleware/upload.middleware';
@@ -12,7 +11,6 @@ export class PaymentController {
   private paymentRepository = AppDataSource.getRepository(Payment);
   private studentRepository = AppDataSource.getRepository(Student);
   private programRepository = AppDataSource.getRepository(Program);
-  private centerRepository = AppDataSource.getRepository(Center);
 
   // Get all payments with pagination and filters
   async getAllPayments(req: Request, res: Response) {
@@ -23,7 +21,6 @@ export class PaymentController {
         search = '',
         studentId = '',
         programId = '',
-        centerId = '',
         status = '',
         method = '',
         sortBy = 'paymentDate',
@@ -37,7 +34,6 @@ export class PaymentController {
         .leftJoinAndSelect('payment.student', 'student')
         .leftJoinAndSelect('student.user', 'studentUser')
         .leftJoinAndSelect('payment.program', 'program')
-        .leftJoinAndSelect('payment.center', 'center')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`payment.${sortBy}`, sortOrder as 'ASC' | 'DESC');
@@ -58,11 +54,6 @@ export class PaymentController {
       // Program filter
       if (programId) {
         queryBuilder.andWhere('payment.programId = :programId', { programId });
-      }
-
-      // Center filter
-      if (centerId) {
-        queryBuilder.andWhere('payment.center_id = :centerId', { centerId });
       }
 
       // Status filter
@@ -104,7 +95,7 @@ export class PaymentController {
 
       const payment = await this.paymentRepository.findOne({
         where: { id },
-        relations: ['student', 'student.user', 'program', 'center'],
+        relations: ['student', 'student.user', 'program'],
       });
 
       if (!payment) {
@@ -132,7 +123,6 @@ export class PaymentController {
       const {
         studentId,
         programId,
-        centerId,
         amount,
         paymentMethod,
         transactionId,
@@ -166,26 +156,10 @@ export class PaymentController {
         });
       }
 
-      // Verify center exists
-      let center = null;
-      if (centerId) {
-        center = await this.centerRepository.findOne({
-          where: { id: centerId },
-        });
-
-        if (!center) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Center not found',
-          });
-        }
-      }
-
       // Create payment entity using new instance
       const payment = new Payment();
       payment.student = student;
       payment.program = program;
-      payment.center = center;
       payment.paymentDate = new Date();
       payment.amount = parseFloat(amount);
       payment.paymentMethod = paymentMethod;
@@ -201,7 +175,7 @@ export class PaymentController {
       // Fetch complete payment with relations
       const completePayment = await this.paymentRepository.findOne({
         where: { id: payment.id },
-        relations: ['student', 'student.user', 'program', 'center'],
+        relations: ['student', 'student.user', 'program'],
       });
 
       res.status(201).json({
@@ -222,7 +196,6 @@ export class PaymentController {
     try {
       const { id } = req.params;
       const {
-        centerId,
         amount,
         paymentMethod,
         transactionId,
@@ -234,7 +207,7 @@ export class PaymentController {
 
       const payment = await this.paymentRepository.findOne({
         where: { id },
-        relations: ['student', 'program', 'center'],
+        relations: ['student', 'program'],
       });
 
       if (!payment) {
@@ -267,29 +240,13 @@ export class PaymentController {
         payment.remarks = remarks || null;
       }
 
-      // Update center if centerId provided
-      if (centerId) {
-        const center = await this.centerRepository.findOne({
-          where: { id: centerId },
-        });
-
-        if (!center) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Center not found',
-          });
-        }
-
-        payment.center = center;
-      }
-
       // Save updated payment
       await this.paymentRepository.save(payment);
 
       // Fetch updated payment with relations
       const updatedPayment = await this.paymentRepository.findOne({
         where: { id: payment.id },
-        relations: ['student', 'student.user', 'program', 'center'],
+        relations: ['student', 'student.user', 'program'],
       });
 
       res.json({
