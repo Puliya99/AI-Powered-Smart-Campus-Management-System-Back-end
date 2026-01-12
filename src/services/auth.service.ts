@@ -205,16 +205,46 @@ export class AuthService {
   // Generate unique registration number
   private async generateRegistrationNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.userRepository.count();
-    const number = String(count + 1).padStart(4, '0');
-    return `REG${year}${number}`;
+    const prefix = `REG${year}`;
+    
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.registrationNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('user.registrationNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.registrationNumber) {
+      const lastNumberStr = lastUser.registrationNumber.substring(prefix.length);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(4, '0');
+    return `${prefix}${number}`;
   }
 
   // Generate temporary unique mobile number
   private async generateTempMobileNumber(): Promise<string> {
-    const count = await this.userRepository.count();
-    const number = String(1000000000 + count + 1); // Starts from 1000000001
-    return number;
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.mobileNumber LIKE :prefix', { prefix: 'TEMP%' })
+      .orderBy('user.mobileNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.mobileNumber && lastUser.mobileNumber.startsWith('TEMP')) {
+      const lastNumberStr = lastUser.mobileNumber.substring(4);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(6, '0');
+    return `TEMP${number}`;
   }
 
   // Generate name with initials

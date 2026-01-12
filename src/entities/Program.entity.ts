@@ -3,6 +3,8 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
+  ManyToMany,
+  JoinTable,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
@@ -10,6 +12,7 @@ import { Enrollment } from './Enrollment.entity';
 import { Module } from './Module.entity';
 import { Batch } from './Batch.entity';
 import { Payment } from './Payment.entity';
+import { Center } from './Center.entity';
 
 @Entity('programs')
 export class Program {
@@ -42,6 +45,14 @@ export class Program {
 
   @OneToMany(() => Payment, payment => payment.program)
   payments: Payment[];
+
+  @ManyToMany(() => Center, center => center.programs)
+  @JoinTable({
+    name: 'program_centers',
+    joinColumn: { name: 'program_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'center_id', referencedColumnName: 'id' }
+  })
+  centers: Center[];
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
