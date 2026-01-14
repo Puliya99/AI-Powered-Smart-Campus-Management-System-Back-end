@@ -134,6 +134,62 @@ export class StudentController {
     }
   }
 
+  // Get currently logged in student's enrolled courses
+  async getMyCourses(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+
+      // Find student associated with the user
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Student record not found',
+        });
+      }
+
+      // Get programs the student is enrolled in
+      const enrollments = await this.enrollmentRepository.find({
+        where: { student: { id: student.id }, status: 'ACTIVE' as any },
+        relations: ['program', 'program.modules', 'program.modules.lecturer', 'program.modules.lecturer.user'],
+      });
+
+      const modules: any[] = [];
+      enrollments.forEach(enrollment => {
+        if (enrollment.program && enrollment.program.modules) {
+          enrollment.program.modules.forEach(module => {
+            modules.push({
+              id: module.id,
+              moduleCode: module.moduleCode,
+              moduleName: module.moduleName,
+              semesterNumber: module.semesterNumber,
+              credits: module.credits,
+              description: module.description,
+              lecturer: module.lecturer ? {
+                id: module.lecturer.id,
+                name: `${module.lecturer.user.firstName} ${module.lecturer.user.lastName}`,
+                email: module.lecturer.user.email
+              } : null
+            });
+          });
+        }
+      });
+
+      res.json({
+        status: 'success',
+        data: { courses: modules },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch student courses',
+      });
+    }
+  }
+
   // Create new student
   async createStudent(req: Request, res: Response) {
     try {
