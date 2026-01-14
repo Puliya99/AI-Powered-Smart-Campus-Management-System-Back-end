@@ -49,6 +49,7 @@ app.get('/health', (req, res) => {
     });
 });
 app.use(env_1.env.API_PREFIX, routes_1.default);
+app.use('/uploads', express_1.default.static(env_1.env.UPLOAD_PATH));
 app.use((req, res) => {
     res.status(404).json({
         status: 'error',
