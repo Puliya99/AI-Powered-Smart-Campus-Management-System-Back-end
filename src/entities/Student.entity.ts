@@ -1,6 +1,5 @@
 import { PaymentType } from '../enums/PaymentType.enum';
 import { Entity, PrimaryGeneratedColumn, OneToOne, JoinColumn, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
-import { Assignment } from "./Assignment.entity";
 import { Attendance } from "./Attendance.entity";
 import { Enrollment } from "./Enrollment.entity";
 import { Feedback } from "./Feedback.entity";
@@ -31,9 +30,6 @@ export class Student {
 
   @OneToMany(() => Payment, payment => payment.student)
   payments: Payment[];
-
-  @OneToMany(() => Assignment, assignment => assignment.student)
-  assignments: Assignment[];
 
   @OneToMany(() => Result, result => result.student)
   results: Result[];

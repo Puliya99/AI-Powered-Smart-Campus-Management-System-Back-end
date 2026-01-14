@@ -7,6 +7,7 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { Center } from '../entities/Center.entity';
 import { Attendance } from '../entities/Attendance.entity';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
+import { ScheduleType } from '../enums/ScheduleType.enum';
 import { Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 
 export class ScheduleController {
@@ -34,6 +35,9 @@ export class ScheduleController {
         sortBy = 'date',
         sortOrder = 'DESC',
       } = req.query;
+
+      // Auto-complete finished schedules before fetching
+      await this.autoCompleteFinishedSchedules();
 
       const skip = (Number(page) - 1) * Number(limit);
 
@@ -129,6 +133,9 @@ export class ScheduleController {
     try {
       const { id } = req.params;
 
+      // Auto-complete finished schedules before fetching
+      await this.autoCompleteFinishedSchedules();
+
       const schedule = await this.scheduleRepository.findOne({
         where: { id },
         relations: [
@@ -194,6 +201,7 @@ export class ScheduleController {
         endTime,
         lectureHall,
         status,
+        type,
       } = req.body;
 
       // Verify module exists
@@ -277,6 +285,7 @@ export class ScheduleController {
         endTime,
         lectureHall,
         status: status || ScheduleStatus.SCHEDULED,
+        type: type || ScheduleType.PHYSICAL,
       });
 
       schedule.module = module;
@@ -319,6 +328,7 @@ export class ScheduleController {
         endTime,
         lectureHall,
         status,
+        type,
       } = req.body;
 
       const schedule = await this.scheduleRepository.findOne({
@@ -339,6 +349,7 @@ export class ScheduleController {
       if (endTime) schedule.endTime = endTime;
       if (lectureHall) schedule.lectureHall = lectureHall;
       if (status) schedule.status = status;
+      if (type) schedule.type = type;
 
       // Validate time
       if (schedule.startTime >= schedule.endTime) {
@@ -483,6 +494,9 @@ export class ScheduleController {
   // Get schedule statistics
   async getScheduleStats(req: Request, res: Response) {
     try {
+      // Auto-complete finished schedules before fetching stats
+      await this.autoCompleteFinishedSchedules();
+
       const totalSchedules = await this.scheduleRepository.count();
 
       const scheduledCount = await this.scheduleRepository.count({
@@ -601,6 +615,9 @@ export class ScheduleController {
     try {
       const { date } = req.params;
 
+      // Auto-complete finished schedules before fetching
+      await this.autoCompleteFinishedSchedules();
+
       const schedules = await this.scheduleRepository.find({
         where: { date: new Date(date) },
         relations: ['module', 'batch', 'lecturer', 'lecturer.user', 'center'],
@@ -624,6 +641,9 @@ export class ScheduleController {
     try {
       const { lecturerId } = req.params;
       const { startDate, endDate } = req.query;
+
+      // Auto-complete finished schedules before fetching
+      await this.autoCompleteFinishedSchedules();
 
       const queryBuilder = this.scheduleRepository
         .createQueryBuilder('schedule')
@@ -652,6 +672,36 @@ export class ScheduleController {
         status: 'error',
         message: error.message || 'Failed to fetch lecturer schedule',
       });
+    }
+  }
+
+  // Internal helper to automatically complete finished schedules
+  private async autoCompleteFinishedSchedules() {
+    try {
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
+
+      // Find all scheduled sessions that have already ended
+      // They are either from previous days OR today but with endTime < current time
+      const finishedSchedules = await this.scheduleRepository
+        .createQueryBuilder('schedule')
+        .where('schedule.status = :status', { status: ScheduleStatus.SCHEDULED })
+        .andWhere('(schedule.date < :currentDate OR (schedule.date = :currentDate AND schedule.endTime < :currentTime))', {
+          currentDate,
+          currentTime,
+        })
+        .getMany();
+
+      if (finishedSchedules.length > 0) {
+        for (const schedule of finishedSchedules) {
+          schedule.status = ScheduleStatus.COMPLETED;
+        }
+        await this.scheduleRepository.save(finishedSchedules);
+      }
+    } catch (error) {
+      console.error('Error in autoCompleteFinishedSchedules:', error);
+      // We don't throw here to avoid breaking the main request flow
     }
   }
 }
