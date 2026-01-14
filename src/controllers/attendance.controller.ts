@@ -5,6 +5,7 @@ import { Schedule } from '../entities/Schedule.entity';
 import { Student } from '../entities/Student.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { AttendanceStatus } from '../enums/AttendanceStatus.enum';
+import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { Between } from 'typeorm';
 
 export class AttendanceController {
@@ -380,6 +381,9 @@ export class AttendanceController {
   // Get attendance statistics
   async getAttendanceStats(req: Request, res: Response) {
     try {
+      // Auto-complete finished schedules before fetching stats
+      await this.autoCompleteFinishedSchedules();
+
       const totalRecords = await this.attendanceRepository.count();
 
       const presentCount = await this.attendanceRepository.count({
@@ -578,6 +582,34 @@ export class AttendanceController {
         status: 'error',
         message: error.message || 'Failed to fetch batch attendance summary',
       });
+    }
+  }
+
+  // Internal helper to automatically complete finished schedules
+  private async autoCompleteFinishedSchedules() {
+    try {
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
+
+      // Find all scheduled sessions that have already ended
+      const finishedSchedules = await this.scheduleRepository
+        .createQueryBuilder('schedule')
+        .where('schedule.status = :status', { status: ScheduleStatus.SCHEDULED })
+        .andWhere('(schedule.date < :currentDate OR (schedule.date = :currentDate AND schedule.endTime < :currentTime))', {
+          currentDate,
+          currentTime,
+        })
+        .getMany();
+
+      if (finishedSchedules.length > 0) {
+        for (const schedule of finishedSchedules) {
+          schedule.status = ScheduleStatus.COMPLETED;
+        }
+        await this.scheduleRepository.save(finishedSchedules);
+      }
+    } catch (error) {
+      console.error('Error in autoCompleteFinishedSchedules:', error);
     }
   }
 }
