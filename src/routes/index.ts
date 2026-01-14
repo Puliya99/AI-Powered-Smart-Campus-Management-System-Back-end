@@ -14,6 +14,12 @@ import paymentRoutes from './payment.routes';
 import reportRoutes from './report.routes';
 import settingRoutes from './setting.routes';
 import userRoutes from './user.routes';
+import lectureNoteRoutes from './lectureNote.routes';
+import videoMeetingRoutes from './videoMeeting.routes';
+import quizRoutes from './quiz.routes';
+import assignmentRoutes from './assignment.routes';
+import resultRoutes from './result.routes';
+import performanceRoutes from './performance.routes';
 
 const router = Router();
 
@@ -33,6 +39,12 @@ router.use('/payments', paymentRoutes);
 router.use('/reports', reportRoutes);
 router.use('/settings', settingRoutes);
 router.use('/users', userRoutes);
+router.use('/lecture-notes', lectureNoteRoutes);
+router.use('/video-meetings', videoMeetingRoutes);
+router.use('/quizzes', quizRoutes);
+router.use('/assignments', assignmentRoutes);
+router.use('/results', resultRoutes);
+router.use('/performance', performanceRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -167,6 +179,51 @@ router.get('/', (req, res) => {
         update: 'PUT /api/v1/users/:id',
         delete: 'DELETE /api/v1/users/:id',
         stats: 'GET /api/v1/users/stats',
+      },
+      lectureNotes: {
+        getByModule: 'GET /api/v1/lecture-notes/module/:moduleId',
+        create: 'POST /api/v1/lecture-notes',
+        delete: 'DELETE /api/v1/lecture-notes/:id',
+      },
+      videoMeetings: {
+        create: 'POST /api/v1/video-meetings',
+        getMyActive: 'GET /api/v1/video-meetings/my-active',
+        getHistory: 'GET /api/v1/video-meetings/history',
+        getByCode: 'GET /api/v1/video-meetings/code/:code',
+        getById: 'GET /api/v1/video-meetings/:id',
+        join: 'POST /api/v1/video-meetings/:id/join',
+        leave: 'POST /api/v1/video-meetings/:id/leave',
+        end: 'PUT /api/v1/video-meetings/:id/end',
+        getParticipants: 'GET /api/v1/video-meetings/:id/participants',
+        getByModule: 'GET /api/v1/video-meetings/module/:moduleId',
+      },
+      quizzes: {
+        create: 'POST /api/v1/quizzes',
+        getByModule: 'GET /api/v1/quizzes/module/:moduleId',
+        getById: 'GET /api/v1/quizzes/:id',
+        addQuestions: 'POST /api/v1/quizzes/:quizId/questions',
+        publish: 'PUT /api/v1/quizzes/:id/publish',
+        startAttempt: 'POST /api/v1/quizzes/:quizId/start',
+        submitAttempt: 'POST /api/v1/quizzes/attempts/:id/submit',
+        getAttemptResults: 'GET /api/v1/quizzes/attempts/:id',
+        getAttempts: 'GET /api/v1/quizzes/:quizId/attempts',
+      },
+      assignments: {
+        getByModule: 'GET /api/v1/assignments/module/:moduleId',
+        create: 'POST /api/v1/assignments',
+        update: 'PUT /api/v1/assignments/:id',
+        delete: 'DELETE /api/v1/assignments/:id',
+        submit: 'POST /api/v1/assignments/:assignmentId/submit',
+        getSubmissions: 'GET /api/v1/assignments/:assignmentId/submissions',
+        markSubmission: 'PUT /api/v1/assignments/submissions/:id/mark',
+        download: 'GET /api/v1/assignments/submissions/:id/download',
+      },
+      results: {
+        getByModule: 'GET /api/v1/results/module/:moduleId',
+        upsert: 'POST /api/v1/results',
+        bulkUpsert: 'POST /api/v1/results/bulk',
+        delete: 'DELETE /api/v1/results/:id',
+        getMyResults: 'GET /api/v1/results/my-results',
       },
     },
   });
