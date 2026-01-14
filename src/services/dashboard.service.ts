@@ -93,7 +93,7 @@ export class DashboardService {
     // Get student data
     const student = await this.studentRepository.findOne({
       where: { user: { id: userId } },
-      relations: ['enrollments', 'attendances', 'assignments', 'results', 'payments'],
+      relations: ['enrollments', 'attendances', 'submissions', 'results', 'payments'],
     });
 
     if (!student) {
@@ -114,8 +114,8 @@ export class DashboardService {
         where: { student: { id: student.id }, status: 'ACTIVE' as any },
       }),
       this.calculateAttendanceRate(student.id),
-      this.assignmentRepository.count({
-        where: { student: { id: student.id }, submissionStatus: 'NOT_SUBMITTED' as any },
+      AppDataSource.getRepository('Submission').count({
+        where: { student: { id: student.id }, status: 'SUBMITTED' as any },
       }),
       this.calculateAverageGrade(student.id),
       this.getUpcomingClasses(student.id),
@@ -138,7 +138,7 @@ export class DashboardService {
       stats: {
         enrolledCourses,
         attendanceRate: Math.round(attendanceRate),
-        pendingAssignments,
+        completedAssignments: pendingAssignments,
         averageGrade: averageGrade.toFixed(2),
       },
       upcomingClasses,
