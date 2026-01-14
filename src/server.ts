@@ -2,8 +2,10 @@ import app from './app';
 import { env, validateEnv } from './config/env';
 import { initializeDatabase } from './config/database';
 import { logger } from './utils/logger';
+import { createServer } from 'http';
+import { setupSocketIO } from './config/socket';
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
@@ -15,8 +17,11 @@ const startServer = async () => {
     console.log('🔄 Connecting to database...');
     await initializeDatabase();
 
+    const httpServer = createServer(app);
+    setupSocketIO(httpServer);
+
     // Start server
-    const server = app.listen(PORT, () => {
+    const server = httpServer.listen(PORT, () => {
       console.log(`
 ╔════════════════════════════════════════╗
 ║   🚀 Smart Campus API Server          ║
