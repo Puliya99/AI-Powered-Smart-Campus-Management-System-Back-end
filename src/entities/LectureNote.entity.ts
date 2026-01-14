@@ -16,13 +16,16 @@ export class LectureNote {
   @Column({ type: 'varchar', length: 200 })
   title: string;
 
+  @Column({ type: 'enum', enum: ['TEXT', 'IMAGE', 'LINK', 'FILE'], default: 'FILE' })
+  type: 'TEXT' | 'IMAGE' | 'LINK' | 'FILE';
+
   @Column({ type: 'text', nullable: true })
   content: string;
 
   @Column({ type: 'varchar', length: 500, nullable: true })
   fileUrl: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   uploadDate: Date;
 
   @CreateDateColumn()
