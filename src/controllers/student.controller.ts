@@ -109,7 +109,8 @@ export class StudentController {
           'enrollments.batch',
           'attendances',
           'payments',
-          'assignments',
+          'submissions',
+          'submissions.assignment',
           'results',
         ],
       });
