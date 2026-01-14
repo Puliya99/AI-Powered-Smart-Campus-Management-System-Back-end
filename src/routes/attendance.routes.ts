@@ -8,10 +8,10 @@ const router = Router();
 // All routes require authentication
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
-// Get attendance statistics (Admin only)
+// Get attendance statistics (Admin and Lecturers)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER),
   attendanceController.getAttendanceStats.bind(attendanceController)
 );
 
