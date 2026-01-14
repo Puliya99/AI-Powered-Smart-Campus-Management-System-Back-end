@@ -65,6 +65,9 @@ app.get('/health', (req: Request, res: Response) => {
 // API Routes
 app.use(env.API_PREFIX, routes);
 
+// Serve Static Files
+app.use('/uploads', express.static(env.UPLOAD_PATH));
+
 // 404 Handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({
