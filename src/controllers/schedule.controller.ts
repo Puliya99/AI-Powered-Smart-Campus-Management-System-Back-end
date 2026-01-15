@@ -10,6 +10,8 @@ import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { ScheduleType } from '../enums/ScheduleType.enum';
 import { Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 
+import { Role } from '../enums/Role.enum';
+
 export class ScheduleController {
   private scheduleRepository = AppDataSource.getRepository(Schedule);
   private moduleRepository = AppDataSource.getRepository(Module);
@@ -38,6 +40,18 @@ export class ScheduleController {
 
       // Auto-complete finished schedules before fetching
       await this.autoCompleteFinishedSchedules();
+
+      const user = (req as any).user;
+      let filterLecturerId = (lecturerId as string) || '';
+
+      if (user.role === Role.LECTURER) {
+        const lecturer = await this.lecturerRepository.findOne({
+          where: { user: { id: user.userId } },
+        });
+        if (lecturer) {
+          filterLecturerId = lecturer.id;
+        }
+      }
 
       const skip = (Number(page) - 1) * Number(limit);
 
@@ -72,8 +86,8 @@ export class ScheduleController {
       }
 
       // Lecturer filter
-      if (lecturerId) {
-        queryBuilder.andWhere('schedule.lecturerId = :lecturerId', { lecturerId });
+      if (filterLecturerId) {
+        queryBuilder.andWhere('schedule.lecturerId = :filterLecturerId', { filterLecturerId });
       }
 
       // Center filter
@@ -497,24 +511,50 @@ export class ScheduleController {
       // Auto-complete finished schedules before fetching stats
       await this.autoCompleteFinishedSchedules();
 
-      const totalSchedules = await this.scheduleRepository.count();
+      const user = (req as any).user;
+      let lecturerId: string | undefined;
+
+      if (user.role === Role.LECTURER) {
+        const lecturer = await this.lecturerRepository.findOne({
+          where: { user: { id: user.userId } },
+        });
+        if (lecturer) {
+          lecturerId = lecturer.id;
+        }
+      }
+
+      const totalSchedules = await this.scheduleRepository.count({
+        where: lecturerId ? { lecturer: { id: lecturerId } } : {},
+      });
 
       const scheduledCount = await this.scheduleRepository.count({
-        where: { status: ScheduleStatus.SCHEDULED },
+        where: {
+          status: ScheduleStatus.SCHEDULED,
+          ...(lecturerId && { lecturer: { id: lecturerId } }),
+        },
       });
 
       const completedCount = await this.scheduleRepository.count({
-        where: { status: ScheduleStatus.COMPLETED },
+        where: {
+          status: ScheduleStatus.COMPLETED,
+          ...(lecturerId && { lecturer: { id: lecturerId } }),
+        },
       });
 
       const cancelledCount = await this.scheduleRepository.count({
-        where: { status: ScheduleStatus.CANCELLED },
+        where: {
+          status: ScheduleStatus.CANCELLED,
+          ...(lecturerId && { lecturer: { id: lecturerId } }),
+        },
       });
 
       // Get today's schedules
       const today = new Date().toISOString().split('T')[0];
       const todaySchedules = await this.scheduleRepository.count({
-        where: { date: new Date(today) },
+        where: {
+          date: new Date(today),
+          ...(lecturerId && { lecturer: { id: lecturerId } }),
+        },
       });
 
       // Get upcoming schedules (next 7 days)
@@ -524,6 +564,7 @@ export class ScheduleController {
         where: {
           date: Between(new Date(), nextWeek),
           status: ScheduleStatus.SCHEDULED,
+          ...(lecturerId && { lecturer: { id: lecturerId } }),
         },
       });
 
