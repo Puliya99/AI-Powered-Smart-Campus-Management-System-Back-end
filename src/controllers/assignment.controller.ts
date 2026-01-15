@@ -85,6 +85,59 @@ export class AssignmentController {
     }
   }
 
+  // Get all assignments for currently logged in student
+  async getMyAssignments(req: Request, res: Response) {
+    try {
+      const user = (req as any).user;
+      
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: user.userId } },
+      });
+
+      if (!student) {
+        return res.status(403).json({ status: 'error', message: 'Student profile not found' });
+      }
+
+      // Get active enrollments to find which modules the student is in
+      const enrollments = await this.enrollmentRepository.find({
+        where: { student: { id: student.id }, status: 'ACTIVE' as any },
+        relations: ['program', 'program.modules'],
+      });
+
+      const moduleIds: string[] = [];
+      enrollments.forEach(e => {
+        if (e.program && e.program.modules) {
+          e.program.modules.forEach(m => moduleIds.push(m.id));
+        }
+      });
+
+      if (moduleIds.length === 0) {
+        return res.json({ status: 'success', data: { assignments: [] } });
+      }
+
+      // Fetch assignments for all these modules
+      const assignments = await this.assignmentRepository
+        .createQueryBuilder('assignment')
+        .leftJoinAndSelect('assignment.module', 'module')
+        .leftJoinAndSelect('assignment.lecturer', 'lecturer')
+        .leftJoinAndSelect('lecturer.user', 'lecturerUser')
+        .where('module.id IN (:...moduleIds)', { moduleIds })
+        .orderBy('assignment.dueDate', 'ASC')
+        .getMany();
+
+      const assignmentsWithSubmissions = await Promise.all(assignments.map(async (assignment) => {
+        const submission = await this.submissionRepository.findOne({
+          where: { assignment: { id: assignment.id }, student: { id: student.id } }
+        });
+        return { ...assignment, submission };
+      }));
+
+      return res.json({ status: 'success', data: { assignments: assignmentsWithSubmissions } });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch my assignments' });
+    }
+  }
+
   // Get assignment by ID
   async getAssignmentById(req: Request, res: Response) {
     try {
