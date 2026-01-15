@@ -104,7 +104,7 @@ export class DashboardService {
     const [
       enrolledCourses,
       attendanceRate,
-      pendingAssignments,
+      completedAssignments,
       averageGrade,
       upcomingClasses,
       recentResults,
@@ -116,7 +116,7 @@ export class DashboardService {
       }),
       this.calculateAttendanceRate(student.id),
       AppDataSource.getRepository('Submission').count({
-        where: { student: { id: student.id }, status: 'SUBMITTED' as any },
+        where: { student: { id: student.id } },
       }),
       this.calculateAverageGrade(student.id),
       this.getUpcomingClasses(student.id),
@@ -139,7 +139,7 @@ export class DashboardService {
       stats: {
         enrolledCourses,
         attendanceRate: Math.round(attendanceRate),
-        completedAssignments: pendingAssignments,
+        completedAssignments,
         averageGrade: averageGrade.toFixed(2),
       },
       upcomingClasses,
