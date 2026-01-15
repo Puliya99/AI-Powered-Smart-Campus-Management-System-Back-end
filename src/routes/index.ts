@@ -20,6 +20,7 @@ import quizRoutes from './quiz.routes';
 import assignmentRoutes from './assignment.routes';
 import resultRoutes from './result.routes';
 import performanceRoutes from './performance.routes';
+import feedbackRoutes from './feedback.routes';
 
 const router = Router();
 
@@ -45,6 +46,7 @@ router.use('/quizzes', quizRoutes);
 router.use('/assignments', assignmentRoutes);
 router.use('/results', resultRoutes);
 router.use('/performance', performanceRoutes);
+router.use('/feedback', feedbackRoutes);
 
 // Default route
 router.get('/', (req, res) => {
