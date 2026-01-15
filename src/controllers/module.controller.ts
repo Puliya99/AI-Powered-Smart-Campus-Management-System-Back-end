@@ -96,6 +96,8 @@ export class ModuleController {
           'lecturer.user',
           'schedules',
           'schedules.batch',
+          'schedules.lecturer',
+          'schedules.lecturer.user',
           'assignments',
           'results',
           'feedbacks',
@@ -107,6 +109,20 @@ export class ModuleController {
           status: 'error',
           message: 'Module not found',
         });
+      }
+
+      // Filter schedules for lecturers to only show their own schedules
+      const user = (req as any).user;
+      if (user && user.role === 'LECTURER') {
+        const lecturer = await this.lecturerRepository.findOne({
+          where: { user: { id: user.userId } }
+        });
+
+        if (lecturer) {
+          module.schedules = module.schedules.filter(
+            schedule => schedule.lecturer && schedule.lecturer.id === lecturer.id
+          );
+        }
       }
 
       res.json({
