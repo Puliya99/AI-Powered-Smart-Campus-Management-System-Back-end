@@ -39,16 +39,15 @@ export class QuizController {
         return res.status(404).json({ status: 'error', message: 'Module not found' });
       }
 
-      const quiz = this.quizRepository.create({
-        title,
-        description,
-        module,
-        lecturer,
-        durationMinutes,
-        startTime: startTime ? new Date(startTime) : null,
-        endTime: endTime ? new Date(endTime) : null,
-        isPublished: false,
-      });
+      const quiz = this.quizRepository.create();
+      quiz.title = title;
+      quiz.description = description;
+      quiz.module = module;
+      quiz.lecturer = lecturer;
+      quiz.durationMinutes = durationMinutes;
+      quiz.startTime = startTime ? new Date(startTime) : (null as any);
+      quiz.endTime = endTime ? new Date(endTime) : (null as any);
+      quiz.isPublished = false;
 
       await this.quizRepository.save(quiz);
 
@@ -206,8 +205,8 @@ export class QuizController {
       quiz.title = title || quiz.title;
       quiz.description = description || quiz.description;
       quiz.durationMinutes = durationMinutes || quiz.durationMinutes;
-      quiz.startTime = startTime ? new Date(startTime) : quiz.startTime;
-      quiz.endTime = endTime ? new Date(endTime) : quiz.endTime;
+      quiz.startTime = startTime ? new Date(startTime) : (quiz.startTime as any);
+      quiz.endTime = endTime ? new Date(endTime) : (quiz.endTime as any);
 
       await this.quizRepository.save(quiz);
 
@@ -259,6 +258,38 @@ export class QuizController {
         where,
         order: { createdAt: 'DESC' },
       });
+
+      if (role === Role.STUDENT) {
+        const student = await this.studentRepository.findOne({
+          where: { user: { id: (req as any).user.userId } }
+        });
+
+        if (student) {
+          const quizzesWithStatus = await Promise.all(quizzes.map(async (quiz) => {
+            const attempt = await this.attemptRepository.findOne({
+              where: { quiz: { id: quiz.id }, student: { id: student.id } }
+            });
+
+            let finalStatus: string | null = attempt ? attempt.status : null;
+            if (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT')) {
+              const startTime = new Date(attempt.startTime).getTime();
+              const now = new Date().getTime();
+              const durationMs = quiz.durationMinutes * 60 * 1000;
+              // Use 10s grace period consistent with startAttempt
+              if (now < (startTime + durationMs + 10000)) {
+                finalStatus = 'IN_PROGRESS'; // Mask as IN_PROGRESS if time is not up
+              }
+            }
+
+            return {
+              ...quiz,
+              attemptStatus: finalStatus,
+              attemptId: attempt ? attempt.id : (null as any)
+            };
+          }));
+          return res.json({ status: 'success', data: { quizzes: quizzesWithStatus } });
+        }
+      }
 
       res.json({ status: 'success', data: { quizzes } });
     } catch (error: any) {
@@ -314,10 +345,35 @@ export class QuizController {
       // Check if already attempted
       const existingAttempt = await this.attemptRepository.findOne({
         where: { quiz: { id: quizId }, student: { id: student.id } },
+        relations: ['answers', 'answers.question', 'quiz'],
       });
 
       if (existingAttempt) {
-        return res.status(400).json({ status: 'error', message: 'You have already attempted this quiz' });
+        // If it was cancelled by lecturer or student, and NOT restarted, check if it can be resumed
+        // Actually, if it's CANCELLED, we only allow resume if lecturer restarts it (which sets it back to IN_PROGRESS)
+        
+        const startTime = new Date(existingAttempt.startTime).getTime();
+        const now = new Date().getTime();
+        const durationMs = existingAttempt.quiz.durationMinutes * 60 * 1000;
+        
+        // Add a small grace period (e.g. 10 seconds) to ensure the client doesn't get blocked by minor network delays/drift
+        const isTimeUp = now >= (startTime + durationMs + 10000);
+
+        if (existingAttempt.status === 'IN_PROGRESS' || existingAttempt.status === 'TIMED_OUT' || (!isTimeUp && existingAttempt.status === 'SUBMITTED')) {
+          // Allow resume if in progress, timed out (but still has time), or if time is not up even if submitted
+          if (existingAttempt.status === 'SUBMITTED' || existingAttempt.status === 'TIMED_OUT') {
+            existingAttempt.status = 'IN_PROGRESS';
+            await this.attemptRepository.save(existingAttempt);
+          }
+          return res.json({ status: 'success', data: { attempt: existingAttempt } });
+        }
+        
+        // If it was cancelled or timed out or time is up, don't allow re-entry
+        let errorMessage = 'You have already attempted this quiz';
+        if (existingAttempt.status === 'CANCELLED') errorMessage = 'This attempt was cancelled due to a security violation';
+        else if (isTimeUp) errorMessage = 'The time for this quiz attempt has expired';
+
+        return res.status(400).json({ status: 'error', message: errorMessage });
       }
 
       const attempt = this.attemptRepository.create({
@@ -332,6 +388,46 @@ export class QuizController {
       res.status(201).json({ status: 'success', data: { attempt } });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message || 'Failed to start attempt' });
+    }
+  }
+
+  // Restart quiz attempt (Lecturer only)
+  async restartAttempt(req: Request, res: Response) {
+    try {
+      const { id } = req.params; // attemptId
+      const userId = (req as any).user.userId;
+
+      const attempt = await this.attemptRepository.findOne({
+        where: { id },
+        relations: ['quiz', 'quiz.lecturer', 'quiz.lecturer.user', 'answers'],
+      });
+
+      if (!attempt) {
+        return res.status(404).json({ status: 'error', message: 'Attempt not found' });
+      }
+
+      // Authorization check
+      if (attempt.quiz.lecturer.user.id !== userId && (req as any).user.role !== Role.ADMIN) {
+        return res.status(403).json({ status: 'error', message: 'Unauthorized to restart this attempt' });
+      }
+
+      // Delete existing answers
+      if (attempt.answers && attempt.answers.length > 0) {
+        await this.answerRepository.remove(attempt.answers);
+      }
+
+      // Reset attempt details
+      attempt.status = 'IN_PROGRESS';
+      attempt.startTime = new Date(); // Reset start time to give full duration
+      attempt.submittedTime = (null as any);
+      attempt.score = 0;
+      attempt.reason = (null as any);
+
+      await this.attemptRepository.save(attempt);
+
+      res.json({ status: 'success', message: 'Attempt restarted successfully', data: { attempt } });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to restart attempt' });
     }
   }
 
@@ -354,6 +450,11 @@ export class QuizController {
         return res.status(400).json({ status: 'error', message: 'Attempt already submitted or timed out' });
       }
 
+      // Delete existing answers if any (to support re-submission/update)
+      if (attempt.answers && attempt.answers.length > 0) {
+        await this.answerRepository.remove(attempt.answers);
+      }
+
       let score = 0;
       const answerEntities = [];
 
@@ -368,7 +469,7 @@ export class QuizController {
         answerEntities.push(this.answerRepository.create({
           attempt,
           question: q,
-          selectedOption: studentAnswer?.selectedOption || null,
+          selectedOption: studentAnswer?.selectedOption || (null as any),
           isCorrect,
         }));
       }
@@ -391,14 +492,38 @@ export class QuizController {
     try {
       const { id } = req.params; // attemptId
       const userId = (req as any).user.userId;
+      const role = (req as any).user.role;
 
       const attempt = await this.attemptRepository.findOne({
         where: { id },
-        relations: ['quiz', 'quiz.questions', 'answers', 'answers.question'],
+        relations: ['quiz', 'quiz.module', 'quiz.questions', 'answers', 'answers.question'],
       });
 
       if (!attempt) {
         return res.status(404).json({ status: 'error', message: 'Attempt not found' });
+      }
+
+      // If student is fetching, check if time is up
+      if (role === Role.STUDENT) {
+        const startTime = new Date(attempt.startTime).getTime();
+        const now = new Date().getTime();
+        const durationMs = attempt.quiz.durationMinutes * 60 * 1000;
+        const isTimeUp = now >= (startTime + durationMs + 10000); // 10s grace period
+
+        // Hide results if time is not up AND it wasn't cancelled
+        if (!isTimeUp && attempt.status !== 'CANCELLED') {
+          return res.json({ 
+            status: 'success', 
+            data: { 
+              attempt: {
+                ...attempt,
+                score: null,
+                answers: [], // Hide answers
+                isResultsPending: true
+              }
+            } 
+          });
+        }
       }
 
       res.json({ status: 'success', data: { attempt } });
@@ -451,17 +576,35 @@ export class QuizController {
 
       await this.violationRepository.save(violation);
 
-      if (shouldCancel) {
+      // Check violation counts for this attempt
+      const violationCount = await this.violationRepository.count({
+        where: { attempt: { id: attemptId } }
+      });
+
+      let responseMessage = 'Violation reported';
+      let cancelled = false;
+
+      // Logic: Cancel only if explicitly requested (e.g. serious violation or persistent for 10s) 
+      // OR if it's the 5th violation (multiple warnings given first)
+      if (shouldCancel || violationCount >= 5) {
         attempt.status = 'CANCELLED';
-        attempt.reason = details || `Auto-cancelled due to ${violationType}`;
+        attempt.reason = details || `Multiple security violations reported (Type: ${violationType})`;
         attempt.submittedTime = new Date();
         await this.attemptRepository.save(attempt);
+        cancelled = true;
+        responseMessage = `Attempt cancelled: ${details || 'Security violation'}`;
+      } else {
+        responseMessage = `Security Warning (${violationCount}/5): ${violationType}. Correction required!`;
       }
 
       res.status(201).json({ 
         status: 'success', 
-        message: 'Violation reported', 
-        data: { cancelled: !!shouldCancel } 
+        message: responseMessage, 
+        data: { 
+          cancelled,
+          violationCount,
+          warning: !cancelled
+        } 
       });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message || 'Failed to report violation' });
