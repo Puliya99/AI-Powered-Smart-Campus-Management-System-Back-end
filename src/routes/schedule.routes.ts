@@ -11,7 +11,7 @@ router.use(authMiddleware.authenticate.bind(authMiddleware));
 // Get schedule statistics
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER),
   scheduleController.getScheduleStats.bind(scheduleController)
 );
 
@@ -25,7 +25,7 @@ router.get(
 );
 
 // Get all schedules
-router.get('/', scheduleController.getAllSchedules.bind(scheduleController));
+router.get('/', authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.USER), scheduleController.getAllSchedules.bind(scheduleController));
 
 // Get schedule by ID
 router.get('/:id', scheduleController.getScheduleById.bind(scheduleController));
