@@ -28,10 +28,10 @@ export class Quiz {
   totalMarks: number;
 
   @Column({ type: 'timestamp', nullable: true })
-  startTime: Date;
+  startTime: Date | null;
 
   @Column({ type: 'timestamp', nullable: true })
-  endTime: Date;
+  endTime: Date | null;
 
   @Column({ type: 'boolean', default: false })
   isPublished: boolean;
