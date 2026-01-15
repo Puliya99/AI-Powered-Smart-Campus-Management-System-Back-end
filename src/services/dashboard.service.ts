@@ -10,6 +10,7 @@ import { Enrollment } from '../entities/Enrollment.entity';
 import { Schedule } from '../entities/Schedule.entity';
 import { Role } from '../enums/Role.enum';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
+import { In, MoreThanOrEqual } from 'typeorm';
 
 export class DashboardService {
   private userRepository = AppDataSource.getRepository(User);
@@ -361,8 +362,31 @@ export class DashboardService {
   }
 
   private async getUpcomingClasses(studentId: string) {
-    // Placeholder - implement based on your schedule structure
-    return [];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get active enrollments for the student
+    const enrollments = await this.enrollmentRepository.find({
+      where: { student: { id: studentId }, status: 'ACTIVE' as any },
+      relations: ['batch'],
+    });
+
+    const batchIds = enrollments.map(e => e.batch?.id).filter(id => !!id);
+
+    if (batchIds.length === 0) {
+      return [];
+    }
+
+    // Get upcoming schedules for these batches
+    return AppDataSource.getRepository(Schedule).find({
+      where: {
+        batch: { id: In(batchIds) },
+        date: MoreThanOrEqual(today as any),
+        status: ScheduleStatus.SCHEDULED,
+      },
+      take: 5,
+      relations: ['module', 'batch', 'lecturer', 'lecturer.user'],
+      order: { date: 'ASC', startTime: 'ASC' },
+    });
   }
 
   private async getLecturerUpcomingClasses(lecturerId: string) {
