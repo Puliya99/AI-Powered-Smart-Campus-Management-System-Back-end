@@ -5,11 +5,14 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToOne,
   CreateDateColumn,
   UpdateDateColumn,
   BeforeInsert,
   BeforeUpdate,
 } from 'typeorm';
+import { Student } from './Student.entity';
+import { Lecturer } from './Lecturer.entity';
 import { Center } from './Center.entity';
 import bcrypt from 'bcryptjs';
 
@@ -71,6 +74,12 @@ export class User {
 
   @ManyToOne(() => Center, center => center.users, { nullable: true })
   center: Center;
+
+  @OneToOne(() => Student, student => student.user)
+  student: Student;
+
+  @OneToOne(() => Lecturer, lecturer => lecturer.user)
+  lecturer: Lecturer;
 
   @CreateDateColumn()
   createdAt: Date;
