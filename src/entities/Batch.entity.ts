@@ -17,7 +17,7 @@ export class Batch {
   startDate: Date;
 
   @Column({ type: 'date', nullable: true })
-  endDate: Date;
+  endDate: Date | null;
 
   @ManyToOne(() => Program, program => program.batches)
   program: Program;
