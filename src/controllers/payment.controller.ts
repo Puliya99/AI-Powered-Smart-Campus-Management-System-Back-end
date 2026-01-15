@@ -181,17 +181,32 @@ export class PaymentController {
         }
       }
 
+      // Calculate outstanding if not provided
+      let finalOutstanding = outstanding ? parseFloat(outstanding) : 0;
+      if (outstanding === undefined || outstanding === null || outstanding === '' || outstanding === 0 || outstanding === '0') {
+        const payments = await this.paymentRepository.find({
+          where: {
+            student: { id: studentId },
+            program: { id: programId },
+            status: PaymentStatus.PAID,
+          },
+        });
+        const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+        const calcOutstanding = Number(program.programFee) - totalPaid - parseFloat(amount);
+        finalOutstanding = calcOutstanding > 0 ? calcOutstanding : 0;
+      }
+
       // Create payment entity using new instance
       const payment = new Payment();
       payment.student = student;
       payment.program = program;
-      payment.center = center;
+      payment.center = center!;
       payment.paymentDate = new Date();
       payment.amount = parseFloat(amount);
       payment.paymentMethod = paymentMethod;
       payment.transactionId = transactionId || null;
       payment.nextPaymentDate = nextPaymentDate ? new Date(nextPaymentDate) : null;
-      payment.outstanding = outstanding ? parseFloat(outstanding) : 0;
+      payment.outstanding = finalOutstanding;
       payment.status = status || PaymentStatus.PAID;
       payment.remarks = remarks || null;
 
@@ -415,8 +430,7 @@ export class PaymentController {
         }
 
         // Update payment with receipt information
-        const receiptInfo = `Receipt uploaded: ${file.filename}`;
-        payment.remarks = payment.remarks ? `${payment.remarks}; ${receiptInfo}` : receiptInfo;
+        payment.receiptUrl = `/uploads/${file.filename}`;
         payment.status = PaymentStatus.PAID;
 
         await this.paymentRepository.save(payment);
@@ -438,6 +452,129 @@ export class PaymentController {
     });
   }
 
+  // Create student payment with receipt
+  async createStudentPayment(req: Request, res: Response) {
+    uploadSingle('receipt')(req, res, async (err: any) => {
+      if (err) {
+        return res.status(400).json({
+          status: 'error',
+          message: err.message,
+        });
+      }
+
+      try {
+        const userId = (req as any).user.userId;
+        const { programId, amount, paymentMethod, transactionId, remarks } = req.body;
+        const file = req.file;
+
+        const student = await this.studentRepository.findOne({
+          where: { user: { id: userId } },
+        });
+
+        if (!student) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'Student not found',
+          });
+        }
+
+        const program = await this.programRepository.findOne({
+          where: { id: programId },
+        });
+
+        if (!program) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'Program not found',
+          });
+        }
+
+        // Calculate outstanding
+        const payments = await this.paymentRepository.find({
+          where: {
+            student: { id: student.id },
+            program: { id: program.id },
+            status: PaymentStatus.PAID,
+          },
+        });
+        const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+        const outstanding = Number(program.programFee) - totalPaid - parseFloat(amount);
+
+        const payment = new Payment();
+        payment.student = student;
+        payment.program = program;
+        payment.paymentDate = new Date();
+        payment.amount = parseFloat(amount);
+        payment.paymentMethod = paymentMethod;
+        payment.transactionId = transactionId || (null as any);
+        payment.status = PaymentStatus.PENDING;
+        payment.outstanding = outstanding > 0 ? outstanding : 0;
+        payment.remarks = remarks || (null as any);
+        if (file) {
+          payment.receiptUrl = `/uploads/${file.filename}`;
+        }
+
+        await this.paymentRepository.save(payment);
+
+        res.status(201).json({
+          status: 'success',
+          message: 'Payment added successfully and is pending approval',
+          data: { payment },
+        });
+      } catch (error: any) {
+        res.status(400).json({
+          status: 'error',
+          message: error.message || 'Failed to create payment',
+        });
+      }
+    });
+  }
+
+  // Approve or Reject payment
+  async approvePayment(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { status, remarks } = req.body;
+
+      if (![PaymentStatus.PAID, PaymentStatus.REJECTED].includes(status)) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Invalid status for approval',
+        });
+      }
+
+      const payment = await this.paymentRepository.findOne({
+        where: { id },
+        relations: ['student', 'student.user'],
+      });
+
+      if (!payment) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Payment not found',
+        });
+      }
+
+      payment.status = status;
+      if (remarks) {
+        payment.remarks = remarks;
+      }
+
+      await this.paymentRepository.save(payment);
+
+      res.json({
+        status: 'success',
+        message: `Payment ${status.toLowerCase()} successfully`,
+        data: { payment },
+      });
+    } catch (error: any) {
+      res.status(400).json({
+        status: 'error',
+        message: error.message || 'Failed to update payment status',
+      });
+    }
+  }
+
   // Get student payments (for logged-in student)
   async getStudentPayments(req: Request, res: Response) {
     try {
@@ -445,6 +582,7 @@ export class PaymentController {
 
       const student = await this.studentRepository.findOne({
         where: { user: { id: userId } },
+        relations: ['enrollments', 'enrollments.program'],
       });
 
       if (!student) {
@@ -460,14 +598,98 @@ export class PaymentController {
         order: { paymentDate: 'DESC' },
       });
 
+      // Calculate total outstanding
+      // 1. Get all enrolled programs and their fees
+      const enrolledPrograms = student.enrollments.map(e => e.program);
+      const totalProgramFees = enrolledPrograms.reduce((sum, p) => sum + Number(p.programFee), 0);
+
+      // 2. Get total paid amount (only count PAID status)
+      const totalPaid = payments
+        .filter(p => p.status === PaymentStatus.PAID)
+        .reduce((sum, p) => sum + Number(p.amount), 0);
+
+      const totalOutstanding = totalProgramFees - totalPaid;
+
       res.json({
         status: 'success',
-        data: { payments },
+        data: { 
+          payments,
+          summary: {
+            totalPaid,
+            totalOutstanding: totalOutstanding > 0 ? totalOutstanding : 0,
+            totalProgramFees
+          }
+        },
       });
     } catch (error: any) {
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to fetch payments',
+      });
+    }
+  }
+
+  // Get outstanding amount for a student and program
+  async getOutstanding(req: Request, res: Response) {
+    try {
+      const { studentId, programId } = req.query;
+      let targetStudentId = studentId as string;
+
+      if (targetStudentId === 'me') {
+        const userId = (req as any).user.userId;
+        const student = await this.studentRepository.findOne({
+          where: { user: { id: userId } },
+        });
+        if (!student) {
+          return res.status(404).json({
+            status: 'error',
+            message: 'Student not found',
+          });
+        }
+        targetStudentId = student.id;
+      }
+
+      if (!targetStudentId || !programId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Student ID and Program ID are required',
+        });
+      }
+
+      const program = await this.programRepository.findOne({
+        where: { id: programId as string },
+      });
+
+      if (!program) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Program not found',
+        });
+      }
+
+      const payments = await this.paymentRepository.find({
+        where: {
+          student: { id: targetStudentId },
+          program: { id: programId as string },
+          status: PaymentStatus.PAID,
+        },
+      });
+
+      const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount), 0);
+      const outstanding = Number(program.programFee) - totalPaid;
+
+      res.json({
+        status: 'success',
+        data: {
+          programFee: Number(program.programFee),
+          totalPaid,
+          outstanding: outstanding > 0 ? outstanding : 0,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to calculate outstanding',
       });
     }
   }
