@@ -6,6 +6,7 @@ import { Enrollment } from '../entities/Enrollment.entity';
 import { Center } from '../entities/Center.entity';
 import { Batch } from '../entities/Batch.entity';
 import { Program } from '../entities/Program.entity';
+import { Schedule } from '../entities/Schedule.entity';
 
 export class StudentController {
   private studentRepository = AppDataSource.getRepository(Student);
@@ -138,6 +139,7 @@ export class StudentController {
   async getMyCourses(req: Request, res: Response) {
     try {
       const userId = (req as any).user.userId;
+      const { semester } = req.query;
 
       // Find student associated with the user
       const student = await this.studentRepository.findOne({
@@ -161,6 +163,11 @@ export class StudentController {
       enrollments.forEach(enrollment => {
         if (enrollment.program && enrollment.program.modules) {
           enrollment.program.modules.forEach(module => {
+            // Filter by semester if provided
+            if (semester && module.semesterNumber !== Number(semester)) {
+              return;
+            }
+
             modules.push({
               id: module.id,
               moduleCode: module.moduleCode,
@@ -186,6 +193,73 @@ export class StudentController {
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to fetch student courses',
+      });
+    }
+  }
+
+  // Get currently logged in student's schedule
+  async getMySchedule(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const { startDate, endDate } = req.query;
+
+      // Find student associated with the user
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Student record not found',
+        });
+      }
+
+      // Get active enrollments and their batches
+      const enrollments = await this.enrollmentRepository.find({
+        where: { student: { id: student.id }, status: 'ACTIVE' as any },
+        relations: ['batch'],
+      });
+
+      const batchIds = enrollments.map(e => e.batch?.id).filter(id => !!id);
+
+      if (batchIds.length === 0) {
+        return res.json({
+          status: 'success',
+          data: { schedules: [] },
+        });
+      }
+
+      // Find schedules for these batches
+      const queryBuilder = AppDataSource.getRepository(Schedule)
+        .createQueryBuilder('schedule')
+        .leftJoinAndSelect('schedule.module', 'module')
+        .leftJoinAndSelect('schedule.batch', 'batch')
+        .leftJoinAndSelect('schedule.lecturer', 'lecturer')
+        .leftJoinAndSelect('lecturer.user', 'lecturerUser')
+        .leftJoinAndSelect('schedule.center', 'center')
+        .where('schedule.batchId IN (:...batchIds)', { batchIds })
+        .orderBy('schedule.date', 'ASC')
+        .addOrderBy('schedule.startTime', 'ASC');
+
+      if (startDate) {
+        queryBuilder.andWhere('schedule.date >= :startDate', { startDate });
+      }
+
+      if (endDate) {
+        queryBuilder.andWhere('schedule.date <= :endDate', { endDate });
+      }
+
+      const schedules = await queryBuilder.getMany();
+
+      res.json({
+        status: 'success',
+        data: { schedules },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch student schedule',
       });
     }
   }
