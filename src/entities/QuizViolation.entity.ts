@@ -13,7 +13,7 @@ export class QuizViolation {
   violationType: string; // 'NO_FACE', 'MULTIPLE_FACES', 'CAMERA_DISABLED'
 
   @Column({ type: 'text', nullable: true })
-  details: string;
+  details: string | null;
 
   @CreateDateColumn()
   timestamp: Date;
