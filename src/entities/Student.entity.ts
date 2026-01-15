@@ -13,7 +13,7 @@ export class Student {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => User)
+  @OneToOne(() => User, user => user.student)
   @JoinColumn()
   user: User;
 
