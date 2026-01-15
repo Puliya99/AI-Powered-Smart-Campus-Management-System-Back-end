@@ -175,6 +175,10 @@ export class StudentController {
               semesterNumber: module.semesterNumber,
               credits: module.credits,
               description: module.description,
+              program: enrollment.program ? {
+                id: enrollment.program.id,
+                programName: enrollment.program.programName
+              } : null,
               lecturer: module.lecturer ? {
                 id: module.lecturer.id,
                 name: `${module.lecturer.user.firstName} ${module.lecturer.user.lastName}`,
