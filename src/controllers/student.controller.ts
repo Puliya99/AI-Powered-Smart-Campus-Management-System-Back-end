@@ -7,6 +7,7 @@ import { Center } from '../entities/Center.entity';
 import { Batch } from '../entities/Batch.entity';
 import { Program } from '../entities/Program.entity';
 import { Schedule } from '../entities/Schedule.entity';
+import emailService from '../services/email.service';
 
 export class StudentController {
   private studentRepository = AppDataSource.getRepository(Student);
@@ -325,6 +326,18 @@ export class StudentController {
       });
 
       const savedUser = await this.userRepository.save(user);
+
+      // Send account creation email
+      try {
+        await emailService.sendAccountCreationEmail(
+          savedUser.email,
+          savedUser.firstName,
+          savedUser.username,
+          studentData.password || 'Student123'
+        );
+      } catch (emailError) {
+        console.error('Failed to send account creation email for student:', emailError);
+      }
 
       // Create student record
       const student = this.studentRepository.create({

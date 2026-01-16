@@ -8,10 +8,10 @@ const router = Router();
 // All routes require authentication
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
-// Get schedule statistics
+// Get schedule statistics (Admin, Lecturer, and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN, Role.LECTURER),
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.USER),
   scheduleController.getScheduleStats.bind(scheduleController)
 );
 

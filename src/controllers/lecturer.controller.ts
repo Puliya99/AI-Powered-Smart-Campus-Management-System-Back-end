@@ -4,6 +4,7 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { User } from '../entities/User.entity';
 import { Module } from '../entities/Module.entity';
 import { Schedule } from '../entities/Schedule.entity';
+import emailService from '../services/email.service';
 
 export class LecturerController {
   private lecturerRepository = AppDataSource.getRepository(Lecturer);
@@ -229,6 +230,18 @@ export class LecturerController {
       });
 
       const savedUser = await this.userRepository.save(user);
+
+      // Send account creation email
+      try {
+        await emailService.sendAccountCreationEmail(
+          savedUser.email,
+          savedUser.firstName,
+          savedUser.username,
+          lecturerData.password || 'Lecturer123'
+        );
+      } catch (emailError) {
+        console.error('Failed to send account creation email for lecturer:', emailError);
+      }
 
       // Create lecturer record
       const lecturer = this.lecturerRepository.create({

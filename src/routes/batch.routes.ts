@@ -14,10 +14,10 @@ router.get('/', batchController.getAllBatches.bind(batchController));
 // Get batches dropdown (for forms)
 router.get('/dropdown', batchController.getBatchesDropdown.bind(batchController));
 
-// Get batch statistics (Admin only)
+// Get batch statistics (Admin and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   batchController.getBatchStats.bind(batchController)
 );
 
@@ -27,17 +27,17 @@ router.get('/:id', batchController.getBatchById.bind(batchController));
 // Get batch enrollments
 router.get('/:id/enrollments', batchController.getBatchEnrollments.bind(batchController));
 
-// Create batch (Admin only)
+// Create batch (Admin and Staff)
 router.post(
   '/',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   batchController.createBatch.bind(batchController)
 );
 
-// Update batch (Admin only)
+// Update batch (Admin and Staff)
 router.put(
   '/:id',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   batchController.updateBatch.bind(batchController)
 );
 

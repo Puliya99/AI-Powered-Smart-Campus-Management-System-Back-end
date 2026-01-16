@@ -7,6 +7,8 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
 import { ResultStatus } from '../enums/ResultStatus.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class ResultController {
   private resultRepository = AppDataSource.getRepository(Result);
@@ -139,6 +141,27 @@ export class ResultController {
 
       await this.resultRepository.save(result);
 
+      // Notify student about new/updated result
+      try {
+        const studentWithUser = await this.studentRepository.findOne({
+          where: { id: studentId },
+          relations: ['user']
+        });
+
+        if (studentWithUser) {
+          await notificationService.createNotification({
+            userId: studentWithUser.user.id,
+            title: `Result Updated: ${module.moduleName}`,
+            message: `Your result for ${module.moduleName} has been ${result ? 'updated' : 'added'}. Grade: ${grade || 'N/A'}.`,
+            type: NotificationType.RESULT,
+            link: '/student/results',
+            sendEmail: true
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify student about result:', notifyError);
+      }
+
       res.json({
         status: 'success',
         message: 'Result saved successfully',
@@ -206,7 +229,30 @@ export class ResultController {
             });
           }
         }
-        if (result) await this.resultRepository.save(result);
+        if (result) {
+          await this.resultRepository.save(result);
+          
+          // Notify student (Bulk update)
+          try {
+            const studentWithUser = await this.studentRepository.findOne({
+              where: { id: studentId },
+              relations: ['user']
+            });
+
+            if (studentWithUser) {
+              await notificationService.createNotification({
+                userId: studentWithUser.user.id,
+                title: `Result Published: ${module.moduleName}`,
+                message: `Your result for ${module.moduleName} has been published/updated. Grade: ${grade || 'N/A'}.`,
+                type: NotificationType.RESULT,
+                link: '/student/results',
+                sendEmail: true
+              });
+            }
+          } catch (notifyError) {
+            console.error('Failed to notify student in bulk update:', notifyError);
+          }
+        }
       }
 
       res.json({

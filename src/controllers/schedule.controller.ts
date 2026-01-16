@@ -6,11 +6,15 @@ import { Batch } from '../entities/Batch.entity';
 import { Lecturer } from '../entities/Lecturer.entity';
 import { Center } from '../entities/Center.entity';
 import { Attendance } from '../entities/Attendance.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
+import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { ScheduleType } from '../enums/ScheduleType.enum';
 import { Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 
 import { Role } from '../enums/Role.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class ScheduleController {
   private scheduleRepository = AppDataSource.getRepository(Schedule);
@@ -309,6 +313,46 @@ export class ScheduleController {
 
       await this.scheduleRepository.save(schedule);
 
+      // Notify students and lecturer
+      try {
+        // Find all students in this batch
+        const enrollments = await AppDataSource.getRepository(Enrollment).find({
+          where: { batch: { id: batch.id }, status: EnrollmentStatus.ACTIVE },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        const lecturerUserId = lecturer.user.id;
+
+        const dateStr = new Date(date).toLocaleDateString();
+        const notificationTitle = `New Schedule: ${module.moduleName}`;
+        const notificationMessage = `A new lecture has been scheduled for ${module.moduleName} on ${dateStr} at ${startTime}.`;
+
+        // Notify students
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: notificationTitle,
+            message: notificationMessage,
+            type: NotificationType.GENERAL,
+            link: '/student/schedule',
+            sendEmail: true
+          });
+        }
+
+        // Notify lecturer
+        await notificationService.createNotification({
+          userId: lecturerUserId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: NotificationType.GENERAL,
+          link: '/lecturer/schedule',
+          sendEmail: true
+        });
+      } catch (notifyError) {
+        console.error('Failed to send notifications for new schedule:', notifyError);
+      }
+
       // Fetch complete schedule with relations
       const completeSchedule = await this.scheduleRepository.findOne({
         where: { id: schedule.id },
@@ -453,6 +497,47 @@ export class ScheduleController {
         relations: ['module', 'batch', 'lecturer', 'lecturer.user', 'center'],
       });
 
+      // Notify students and lecturer about schedule update
+      try {
+        if (updatedSchedule) {
+          const enrollments = await AppDataSource.getRepository(Enrollment).find({
+            where: { batch: { id: updatedSchedule.batch.id }, status: EnrollmentStatus.ACTIVE },
+            relations: ['student', 'student.user']
+          });
+
+          const studentUserIds = enrollments.map(e => e.student.user.id);
+          const lecturerUserId = updatedSchedule.lecturer.user.id;
+
+          const dateStr = updatedSchedule.date.toLocaleDateString();
+          const notificationTitle = `Schedule Updated: ${updatedSchedule.module.moduleName}`;
+          const notificationMessage = `The lecture for ${updatedSchedule.module.moduleName} on ${dateStr} has been updated. New time: ${updatedSchedule.startTime}.`;
+
+          // Notify students
+          if (studentUserIds.length > 0) {
+            await notificationService.createNotifications({
+              userIds: studentUserIds,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.GENERAL,
+              link: '/student/schedule',
+              sendEmail: true
+            });
+          }
+
+          // Notify lecturer
+          await notificationService.createNotification({
+            userId: lecturerUserId,
+            title: notificationTitle,
+            message: notificationMessage,
+            type: NotificationType.GENERAL,
+            link: '/lecturer/schedule',
+            sendEmail: true
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to send notifications for updated schedule:', notifyError);
+      }
+
       res.json({
         status: 'success',
         message: 'Schedule updated successfully',
@@ -473,7 +558,7 @@ export class ScheduleController {
 
       const schedule = await this.scheduleRepository.findOne({
         where: { id },
-        relations: ['attendances'],
+        relations: ['attendances', 'module', 'batch', 'lecturer', 'lecturer.user'],
       });
 
       if (!schedule) {
@@ -489,6 +574,43 @@ export class ScheduleController {
           status: 'error',
           message: `Cannot delete schedule with ${schedule.attendances.length} attendance records`,
         });
+      }
+
+      // Notify students and lecturer about schedule deletion before removing it
+      try {
+        const enrollments = await AppDataSource.getRepository(Enrollment).find({
+          where: { batch: { id: schedule.batch.id }, status: EnrollmentStatus.ACTIVE },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        const lecturerUserId = schedule.lecturer.user.id;
+
+        const dateStr = schedule.date.toLocaleDateString();
+        const notificationTitle = `Schedule Cancelled: ${schedule.module.moduleName}`;
+        const notificationMessage = `The lecture for ${schedule.module.moduleName} on ${dateStr} has been cancelled.`;
+
+        // Notify students
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: notificationTitle,
+            message: notificationMessage,
+            type: NotificationType.GENERAL,
+            sendEmail: true
+          });
+        }
+
+        // Notify lecturer
+        await notificationService.createNotification({
+          userId: lecturerUserId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: NotificationType.GENERAL,
+          sendEmail: true
+        });
+      } catch (notifyError) {
+        console.error('Failed to send notifications for deleted schedule:', notifyError);
       }
 
       await this.scheduleRepository.remove(schedule);

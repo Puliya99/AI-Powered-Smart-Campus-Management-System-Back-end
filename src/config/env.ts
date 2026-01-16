@@ -44,6 +44,9 @@ interface EnvConfig {
 
   // Logging
   LOG_LEVEL: string;
+
+  // Frontend
+  FRONTEND_URL: string;
 }
 
 const getEnv = (key: string, defaultValue?: string): string => {
@@ -115,6 +118,9 @@ export const env: EnvConfig = {
 
   // Logging
   LOG_LEVEL: getEnv('LOG_LEVEL', 'info'),
+
+  // Frontend
+  FRONTEND_URL: getEnv('FRONTEND_URL', 'http://localhost:3000'),
 };
 
 // Validate critical environment variables

@@ -8,6 +8,8 @@ import { Student } from '../entities/Student.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
 import { SubmissionStatus } from '../enums/SubmissionStatus.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 import path from 'path';
 import fs from 'fs';
 
@@ -200,6 +202,29 @@ export class AssignmentController {
 
       await this.assignmentRepository.save(assignment);
 
+      // Notify students about new assignment
+      try {
+        const enrollments = await this.enrollmentRepository.find({
+          where: { program: { id: module.program.id }, status: 'ACTIVE' as any },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: `New Assignment: ${title}`,
+            message: `A new assignment has been posted for ${module.moduleName}. Due date: ${new Date(dueDate).toLocaleDateString()}.`,
+            type: NotificationType.ASSIGNMENT,
+            link: '/student/assignments',
+            sendEmail: true
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify students about new assignment:', notifyError);
+      }
+
       return res.status(201).json({ status: 'success', message: 'Assignment created successfully', data: { assignment } });
     } catch (error: any) {
       return res.status(400).json({ status: 'error', message: error.message || 'Failed to create assignment' });
@@ -325,6 +350,26 @@ export class AssignmentController {
 
       await this.submissionRepository.save(submission);
 
+      // Notify lecturer about submission
+      try {
+        const assignmentWithLecturer = await this.assignmentRepository.findOne({
+          where: { id: assignmentId },
+          relations: ['lecturer', 'lecturer.user', 'module']
+        });
+
+        if (assignmentWithLecturer) {
+          await notificationService.createNotification({
+            userId: assignmentWithLecturer.lecturer.user.id,
+            title: `New Submission: ${assignmentWithLecturer.title}`,
+            message: `Student ${user.username} has submitted their assignment for ${assignmentWithLecturer.module.moduleName}.`,
+            type: NotificationType.ASSIGNMENT,
+            link: `/lecturer/assignments/${assignmentId}/submissions`
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify lecturer about submission:', notifyError);
+      }
+
       return res.status(201).json({ status: 'success', message: 'Assignment submitted successfully', data: { submission } });
     } catch (error: any) {
       return res.status(400).json({ status: 'error', message: error.message || 'Failed to submit assignment' });
@@ -385,6 +430,26 @@ export class AssignmentController {
       submission.marks = marks;
       submission.feedback = feedback;
       await this.submissionRepository.save(submission);
+
+      // Notify student about result
+      try {
+        const submissionWithUser = await this.submissionRepository.findOne({
+          where: { id },
+          relations: ['student', 'student.user', 'assignment']
+        });
+
+        if (submissionWithUser) {
+          await notificationService.createNotification({
+            userId: submissionWithUser.student.user.id,
+            title: `Assignment Result: ${submissionWithUser.assignment.title}`,
+            message: `Your assignment for ${submissionWithUser.assignment.title} has been marked. Marks: ${marks}.`,
+            type: NotificationType.RESULT,
+            link: '/student/assignments'
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify student about assignment result:', notifyError);
+      }
 
       return res.json({ status: 'success', message: 'Submission marked successfully', data: { submission } });
     } catch (error: any) {

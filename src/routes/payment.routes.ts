@@ -15,10 +15,10 @@ router.get(
   paymentController.getAllPayments.bind(paymentController)
 );
 
-// Get payment statistics (Admin)
+// Get payment statistics (Admin and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   paymentController.getPaymentStats.bind(paymentController)
 );
 
@@ -74,10 +74,10 @@ router.post(
   paymentController.createStudentPayment.bind(paymentController)
 );
 
-// Approve or Reject payment (Admin)
+// Approve or Reject payment (Admin and Staff)
 router.post(
   '/:id/approve',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   paymentController.approvePayment.bind(paymentController)
 );
 

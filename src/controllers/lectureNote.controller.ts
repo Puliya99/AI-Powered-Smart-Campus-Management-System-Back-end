@@ -6,6 +6,8 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { Student } from '../entities/Student.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class LectureNoteController {
   private lectureNoteRepository = AppDataSource.getRepository(LectureNote);
@@ -134,6 +136,29 @@ export class LectureNoteController {
       });
 
       await this.lectureNoteRepository.save(material);
+
+      // Notify students about new lecture material
+      try {
+        const enrollments = await this.enrollmentRepository.find({
+          where: { program: { id: module.program.id }, status: 'ACTIVE' as any },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: `New Lecture Material: ${title}`,
+            message: `New study material has been uploaded for ${module.moduleName}.`,
+            type: NotificationType.GENERAL,
+            link: `/student/materials?moduleId=${moduleId}`,
+            sendEmail: true
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify students about new lecture material:', notifyError);
+      }
 
       res.status(201).json({
         status: 'success',
