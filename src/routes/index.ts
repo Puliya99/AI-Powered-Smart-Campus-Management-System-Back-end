@@ -22,6 +22,7 @@ import resultRoutes from './result.routes';
 import performanceRoutes from './performance.routes';
 import feedbackRoutes from './feedback.routes';
 import enrollmentRoutes from './enrollment.routes';
+import notificationRoutes from './notification.routes';
 
 const router = Router();
 
@@ -49,6 +50,7 @@ router.use('/results', resultRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/feedback', feedbackRoutes);
 router.use('/enrollments', enrollmentRoutes);
+router.use('/notifications', notificationRoutes);
 
 // Default route
 router.get('/', (req, res) => {
