@@ -14,7 +14,7 @@ export class QuizAnswer {
   question: QuizQuestion;
 
   @Column({ type: 'varchar', length: 1, nullable: true })
-  selectedOption: string;
+  selectedOption: string | null;
 
   @Column({ type: 'boolean', default: false })
   isCorrect: boolean;

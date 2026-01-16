@@ -18,7 +18,7 @@ export class QuizAttempt {
   startTime: Date;
 
   @Column({ type: 'timestamp', nullable: true })
-  submittedTime: Date;
+  submittedTime: Date | null;
 
   @Column({ type: 'decimal', precision: 5, scale: 2, default: 0 })
   score: number;
@@ -27,7 +27,7 @@ export class QuizAttempt {
   status: string; // 'IN_PROGRESS', 'SUBMITTED', 'TIMED_OUT', 'CANCELLED'
 
   @Column({ type: 'text', nullable: true })
-  reason: string;
+  reason: string | null;
 
   @OneToMany(() => QuizAnswer, answer => answer.attempt)
   answers: QuizAnswer[];

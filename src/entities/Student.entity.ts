@@ -6,13 +6,14 @@ import { Feedback } from "./Feedback.entity";
 import { Payment } from "./Payment.entity";
 import { Result } from "./Result.entity";
 import { User } from "./User.entity";
+import { Submission } from "./Submission.entity";
 
 @Entity()
 export class Student {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @OneToOne(() => User)
+  @OneToOne(() => User, user => user.student)
   @JoinColumn()
   user: User;
 
@@ -36,6 +37,9 @@ export class Student {
 
   @OneToMany(() => Feedback, feedback => feedback.student)
   feedbacks: Feedback[];
+
+  @OneToMany(() => Submission, submission => submission.student)
+  submissions: Submission[];
 
   @CreateDateColumn()
   createdAt: Date;

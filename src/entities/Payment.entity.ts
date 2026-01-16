@@ -53,6 +53,9 @@ export class Payment {
   @Column({ type: 'text', nullable: true })
   remarks: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  receiptUrl: string | null;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

@@ -12,6 +12,13 @@ router.use(authMiddleware.authenticate.bind(authMiddleware));
 // Get assignments by module
 router.get('/module/:moduleId', assignmentController.getAssignmentsByModule.bind(assignmentController));
 
+// Get all assignments for currently logged in student
+router.get(
+  '/student/my-assignments',
+  authMiddleware.authorize(Role.STUDENT),
+  assignmentController.getMyAssignments.bind(assignmentController)
+);
+
 // Get assignment by ID
 router.get('/:id', assignmentController.getAssignmentById.bind(assignmentController));
 

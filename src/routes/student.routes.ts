@@ -22,6 +22,20 @@ router.get(
   studentController.getStudentStats.bind(studentController)
 );
 
+// Get currently logged in student's enrolled courses
+router.get(
+  '/my-courses',
+  authMiddleware.authorize(Role.STUDENT),
+  studentController.getMyCourses.bind(studentController)
+);
+
+// Get currently logged in student's schedule
+router.get(
+  '/my-schedule',
+  authMiddleware.authorize(Role.STUDENT),
+  studentController.getMySchedule.bind(studentController)
+);
+
 // Get students dropdown (Admin and Staff only)
 router.get(
   '/dropdown',

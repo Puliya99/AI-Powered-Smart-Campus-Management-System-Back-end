@@ -22,15 +22,22 @@ router.get(
   paymentController.getPaymentStats.bind(paymentController)
 );
 
-// Get payment by ID (Admin, Staff, and own student)
-router.get('/:id', paymentController.getPaymentById.bind(paymentController));
-
 // Get student payments (Student own payments)
 router.get(
   '/student',
   authMiddleware.authorize(Role.STUDENT),
   paymentController.getStudentPayments.bind(paymentController)
 );
+
+// Get outstanding amount for a student and program
+router.get(
+  '/outstanding',
+  authMiddleware.authorize(Role.ADMIN, Role.USER, Role.STUDENT),
+  paymentController.getOutstanding.bind(paymentController)
+);
+
+// Get payment by ID (Admin, Staff, and own student)
+router.get('/:id', paymentController.getPaymentById.bind(paymentController));
 
 // Create payment (Admin and Staff)
 router.post(
@@ -58,6 +65,20 @@ router.post(
   '/:paymentId/receipt',
   authMiddleware.authorize(Role.STUDENT),
   paymentController.uploadReceipt.bind(paymentController)
+);
+
+// Create student payment (Student)
+router.post(
+  '/student',
+  authMiddleware.authorize(Role.STUDENT),
+  paymentController.createStudentPayment.bind(paymentController)
+);
+
+// Approve or Reject payment (Admin)
+router.post(
+  '/:id/approve',
+  authMiddleware.authorize(Role.ADMIN),
+  paymentController.approvePayment.bind(paymentController)
 );
 
 export default router;

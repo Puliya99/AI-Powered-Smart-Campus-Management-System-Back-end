@@ -87,6 +87,13 @@ router.get(
   quizController.getQuizAttempts.bind(quizController)
 );
 
+// Restart quiz attempt (Lecturer only)
+router.post(
+  '/attempts/:id/restart',
+  authMiddleware.authorize(Role.LECTURER),
+  quizController.restartAttempt.bind(quizController)
+);
+
 // Report violation (Student only)
 router.post(
   '/attempts/:attemptId/violations',
