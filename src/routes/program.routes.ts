@@ -14,27 +14,27 @@ router.get('/', programController.getAllPrograms.bind(programController));
 // Get programs dropdown (for forms)
 router.get('/dropdown', programController.getProgramsDropdown.bind(programController));
 
-// Get program statistics (Admin only)
+// Get program statistics (Admin and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   programController.getProgramStats.bind(programController)
 );
 
 // Get program by ID
 router.get('/:id', programController.getProgramById.bind(programController));
 
-// Create program (Admin only)
+// Create program (Admin and Staff)
 router.post(
   '/',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   programController.createProgram.bind(programController)
 );
 
-// Update program (Admin only)
+// Update program (Admin and Staff)
 router.put(
   '/:id',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   programController.updateProgram.bind(programController)
 );
 
