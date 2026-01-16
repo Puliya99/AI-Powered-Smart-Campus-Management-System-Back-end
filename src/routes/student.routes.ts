@@ -15,10 +15,10 @@ router.get(
   studentController.getAllStudents.bind(studentController)
 );
 
-// Get student statistics (Admin only)
+// Get student statistics (Admin and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   studentController.getStudentStats.bind(studentController)
 );
 
