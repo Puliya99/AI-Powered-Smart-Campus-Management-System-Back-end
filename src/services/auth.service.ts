@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import bcrypt from 'bcryptjs';
 import { Role } from '../enums/Role.enum';
 import { Gender } from '../enums/Gender.enum';
+import emailService from './email.service';
 
 export class AuthService {
   private userRepository = AppDataSource.getRepository(User);
@@ -59,6 +60,20 @@ export class AuthService {
     });
 
     await this.userRepository.save(user);
+
+    // Send account creation email
+    if (user.email) {
+      try {
+        await emailService.sendAccountCreationEmail(
+          user.email,
+          user.firstName,
+          user.username,
+          data.password
+        );
+      } catch (emailError) {
+        console.error('Failed to send account creation email during registration:', emailError);
+      }
+    }
 
     // Generate token
     const token = this.generateToken(user.id, user.role);
@@ -143,6 +158,15 @@ export class AuthService {
     // Update password
     user.password = data.newPassword; // Will be hashed by entity hook
     await this.userRepository.save(user);
+
+    // Send password changed email
+    if (user.email) {
+      try {
+        await emailService.sendPasswordChangedEmail(user.email, user.firstName);
+      } catch (emailError) {
+        console.error('Failed to send password changed email:', emailError);
+      }
+    }
 
     return { message: 'Password changed successfully' };
   }
