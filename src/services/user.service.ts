@@ -2,6 +2,7 @@ import { AppDataSource } from '../config/database';
 import { User } from '../entities/User.entity';
 import { Role } from '../enums/Role.enum';
 import { Gender } from '../enums/Gender.enum';
+import emailService from './email.service';
 
 export class UserService {
   private userRepository = AppDataSource.getRepository(User);
@@ -111,6 +112,21 @@ export class UserService {
       const user = this.userRepository.create(userData);
       await this.userRepository.save(user);
 
+      // Send account creation email
+      if (user.email) {
+        try {
+          // Use original password from userData as user.password is now hashed
+          await emailService.sendAccountCreationEmail(
+            user.email,
+            user.firstName,
+            user.username,
+            userData.password || 'User123'
+          );
+        } catch (emailError) {
+          console.error('Failed to send account creation email:', emailError);
+        }
+      }
+
       const { password, ...userWithoutPassword } = user;
       return userWithoutPassword;
     } catch (error: any) {
@@ -175,8 +191,18 @@ export class UserService {
     }
 
     try {
+      const oldPassword = user.password;
       Object.assign(user, userData);
       await this.userRepository.save(user);
+
+      // Send password changed email if password was updated
+      if (userData.password && userData.password !== oldPassword && user.email) {
+        try {
+          await emailService.sendPasswordChangedEmail(user.email, user.firstName);
+        } catch (emailError) {
+          console.error('Failed to send password changed email from UserService:', emailError);
+        }
+      }
 
       const { password, ...userWithoutPassword } = user;
       return userWithoutPassword;
