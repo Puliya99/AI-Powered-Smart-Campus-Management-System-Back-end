@@ -8,7 +8,10 @@ import { QuizViolation } from '../entities/QuizViolation.entity';
 import { Module } from '../entities/Module.entity';
 import { Lecturer } from '../entities/Lecturer.entity';
 import { Student } from '../entities/Student.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class QuizController {
   private quizRepository = AppDataSource.getRepository(Quiz);
@@ -168,13 +171,40 @@ export class QuizController {
   async publishQuiz(req: Request, res: Response) {
     try {
       const { id } = req.params;
-      const quiz = await this.quizRepository.findOne({ where: { id } });
+      const quiz = await this.quizRepository.findOne({ 
+        where: { id },
+        relations: ['module', 'module.program']
+      });
       if (!quiz) {
         return res.status(404).json({ status: 'error', message: 'Quiz not found' });
       }
 
       quiz.isPublished = true;
       await this.quizRepository.save(quiz);
+
+      // Notify students about new quiz
+      try {
+        const enrollmentRepository = AppDataSource.getRepository(Enrollment);
+        const enrollments = await enrollmentRepository.find({
+          where: { program: { id: quiz.module.program.id }, status: 'ACTIVE' as any },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: `New Quiz: ${quiz.title}`,
+            message: `A new quiz has been published for ${quiz.module.moduleName}.`,
+            type: NotificationType.GENERAL,
+            link: `/student/quizzes`,
+            sendEmail: true
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify students about new quiz:', notifyError);
+      }
 
       res.json({ status: 'success', message: 'Quiz published successfully' });
     } catch (error: any) {
