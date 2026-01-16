@@ -407,15 +407,21 @@ export class BatchController {
       const totalEnrollments = await this.enrollmentRepository.count();
 
       // Get batches with most enrollments
-      const batchesWithEnrollments = await this.batchRepository
+      const topBatches = await this.batchRepository
         .createQueryBuilder('batch')
+        .leftJoin('batch.enrollments', 'enrollments')
         .leftJoinAndSelect('batch.program', 'program')
-        .leftJoinAndSelect('batch.enrollments', 'enrollments')
-        .orderBy('COUNT(enrollments.id)', 'DESC')
+        .select([
+          'batch.id',
+          'batch.batchNumber',
+          'program.programName',
+        ])
+        .addSelect('COUNT(enrollments.id)', 'enrollmentCount')
         .groupBy('batch.id')
         .addGroupBy('program.id')
+        .orderBy('\"enrollmentCount\"', 'DESC')
         .limit(5)
-        .getMany();
+        .getRawMany();
 
       res.json({
         status: 'success',
@@ -425,11 +431,11 @@ export class BatchController {
           upcomingBatches,
           completedBatches,
           totalEnrollments,
-          topBatches: batchesWithEnrollments.map(batch => ({
-            id: batch.id,
-            batchNumber: batch.batchNumber,
-            programName: batch.program.programName,
-            enrollmentCount: batch.enrollments.length,
+          topBatches: topBatches.map(batch => ({
+            id: batch.batch_id,
+            batchNumber: batch.batch_batchNumber,
+            programName: batch.program_programName,
+            enrollmentCount: parseInt(batch.enrollmentCount),
           })),
         },
       });
