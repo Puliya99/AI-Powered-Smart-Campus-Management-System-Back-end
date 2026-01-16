@@ -21,6 +21,7 @@ import assignmentRoutes from './assignment.routes';
 import resultRoutes from './result.routes';
 import performanceRoutes from './performance.routes';
 import feedbackRoutes from './feedback.routes';
+import enrollmentRoutes from './enrollment.routes';
 
 const router = Router();
 
@@ -47,6 +48,7 @@ router.use('/assignments', assignmentRoutes);
 router.use('/results', resultRoutes);
 router.use('/performance', performanceRoutes);
 router.use('/feedback', feedbackRoutes);
+router.use('/enrollments', enrollmentRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -226,6 +228,18 @@ router.get('/', (req, res) => {
         bulkUpsert: 'POST /api/v1/results/bulk',
         delete: 'DELETE /api/v1/results/:id',
         getMyResults: 'GET /api/v1/results/my-results',
+      },
+      performance: {
+        getByStudent: 'GET /api/v1/performance/student/:studentId',
+        getByBatch: 'GET /api/v1/performance/batch/:batchId',
+        getOverall: 'GET /api/v1/performance/overall',
+      },
+      feedback: {
+        submit: 'POST /api/v1/feedback/submit',
+        getAll: 'GET /api/v1/feedback',
+        getById: 'GET /api/v1/feedback/:id',
+        respond: 'PUT /api/v1/feedback/:id/respond',
+        delete: 'DELETE /api/v1/feedback/:id',
       },
     },
   });
