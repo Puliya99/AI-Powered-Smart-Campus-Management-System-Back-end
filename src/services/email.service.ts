@@ -108,6 +108,33 @@ export class EmailService {
   }
 
   /**
+   * Send account creation email with login details
+   */
+  async sendAccountCreationEmail(email: string, firstName: string, username: string, passwordText: string) {
+    const loginUrl = `${env.FRONTEND_URL}/login`;
+
+    const mailOptions = {
+      from: {
+        name: 'Smart Campus',
+        address: env.EMAIL_FROM || env.SMTP_USER!,
+      },
+      to: email,
+      subject: 'Your Smart Campus Account Details',
+      html: this.getAccountCreationEmailTemplate(firstName, username, passwordText, loginUrl),
+      text: `Hello ${firstName}, your Smart Campus account has been created.\n\nLogin Details:\nURL: ${loginUrl}\nUsername: ${username}\nPassword: ${passwordText}\n\nPlease change your password after logging in.`,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      console.log('✅ Account creation email sent:', info.messageId);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Failed to send account creation email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
    * Password Reset Email Template
    */
   private getPasswordResetEmailTemplate(resetUrl: string): string {
@@ -314,6 +341,148 @@ export class EmailService {
             </ul>
             
             <p>If you have any questions or need assistance, feel free to reach out to our support team.</p>
+          </div>
+          
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  /**
+   * Account Creation Email Template
+   */
+  private getAccountCreationEmailTemplate(firstName: string, username: string, passwordText: string, loginUrl: string): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Account Created</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+          }
+          .container {
+            background-color: #f9f9f9;
+            border-radius: 10px;
+            padding: 30px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .header {
+            text-align: center;
+            margin-bottom: 30px;
+          }
+          .logo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #4F46E5;
+            margin-bottom: 10px;
+          }
+          .content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+          }
+          h1 {
+            color: #1F2937;
+            margin-top: 0;
+            font-size: 24px;
+            text-align: center;
+          }
+          .credentials {
+            background-color: #F3F4F6;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+          }
+          .credential-item {
+            margin-bottom: 10px;
+          }
+          .label {
+            font-weight: bold;
+            color: #6B7280;
+            display: block;
+            font-size: 12px;
+            text-transform: uppercase;
+          }
+          .value {
+            font-family: monospace;
+            font-size: 16px;
+            color: #1F2937;
+          }
+          .button-container {
+            text-align: center;
+            margin-top: 30px;
+          }
+          .button {
+            background-color: #4F46E5;
+            color: white !important;
+            padding: 12px 30px;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            display: inline-block;
+          }
+          .footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #6B7280;
+            font-size: 14px;
+          }
+          .warning {
+            color: #B91C1C;
+            font-size: 12px;
+            margin-top: 20px;
+            border-top: 1px solid #F3F4F6;
+            padding-top: 15px;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">🎓 Smart Campus</div>
+          </div>
+          
+          <div class="content">
+            <h1>Welcome to Smart Campus</h1>
+            
+            <p>Hello ${firstName},</p>
+            
+            <p>Your account has been successfully created. You can now log in to the system using the credentials below:</p>
+            
+            <div class="credentials">
+              <div class="credential-item">
+                <span class="label">System URL</span>
+                <span class="value">${loginUrl}</span>
+              </div>
+              <div class="credential-item">
+                <span class="label">Username</span>
+                <span class="value">${username}</span>
+              </div>
+              <div class="credential-item">
+                <span class="label">Temporary Password</span>
+                <span class="value">${passwordText}</span>
+              </div>
+            </div>
+            
+            <div class="button-container">
+              <a href="${loginUrl}" class="button">Log In Now</a>
+            </div>
+            
+            <div class="warning">
+              <strong>Security Notice:</strong> For your security, please change your password immediately after your first login.
+            </div>
           </div>
           
           <div class="footer">
