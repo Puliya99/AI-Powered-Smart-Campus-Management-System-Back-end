@@ -6,11 +6,15 @@ import { Batch } from '../entities/Batch.entity';
 import { Lecturer } from '../entities/Lecturer.entity';
 import { Center } from '../entities/Center.entity';
 import { Attendance } from '../entities/Attendance.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
+import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { ScheduleType } from '../enums/ScheduleType.enum';
 import { Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
 
 import { Role } from '../enums/Role.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class ScheduleController {
   private scheduleRepository = AppDataSource.getRepository(Schedule);
@@ -308,6 +312,46 @@ export class ScheduleController {
       schedule.center = center;
 
       await this.scheduleRepository.save(schedule);
+
+      // Notify students and lecturer
+      try {
+        // Find all students in this batch
+        const enrollments = await AppDataSource.getRepository(Enrollment).find({
+          where: { batch: { id: batch.id }, status: EnrollmentStatus.ACTIVE },
+          relations: ['student', 'student.user']
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+        const lecturerUserId = lecturer.user.id;
+
+        const dateStr = new Date(date).toLocaleDateString();
+        const notificationTitle = `New Schedule: ${module.moduleName}`;
+        const notificationMessage = `A new lecture has been scheduled for ${module.moduleName} on ${dateStr} at ${startTime}.`;
+
+        // Notify students
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: notificationTitle,
+            message: notificationMessage,
+            type: NotificationType.GENERAL,
+            link: '/student/schedule',
+            sendEmail: true
+          });
+        }
+
+        // Notify lecturer
+        await notificationService.createNotification({
+          userId: lecturerUserId,
+          title: notificationTitle,
+          message: notificationMessage,
+          type: NotificationType.GENERAL,
+          link: '/lecturer/schedule',
+          sendEmail: true
+        });
+      } catch (notifyError) {
+        console.error('Failed to send notifications for new schedule:', notifyError);
+      }
 
       // Fetch complete schedule with relations
       const completeSchedule = await this.scheduleRepository.findOne({
