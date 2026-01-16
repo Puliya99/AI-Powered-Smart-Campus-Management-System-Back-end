@@ -610,6 +610,10 @@ export class PaymentController {
 
       const totalOutstanding = totalProgramFees - totalPaid;
 
+      // 3. Get next payment due date from the last payment
+      const lastPaymentWithDate = payments.find(p => p.nextPaymentDate);
+      const nextPaymentDue = lastPaymentWithDate ? lastPaymentWithDate.nextPaymentDate : null;
+
       res.json({
         status: 'success',
         data: { 
@@ -617,7 +621,8 @@ export class PaymentController {
           summary: {
             totalPaid,
             totalOutstanding: totalOutstanding > 0 ? totalOutstanding : 0,
-            totalProgramFees
+            totalProgramFees,
+            nextPaymentDue
           }
         },
       });
