@@ -431,6 +431,73 @@ export class EmailService {
       </html>
     `;
   }
+  /**
+   * Send a general notification email
+   */
+  async sendNotificationEmail(email: string, title: string, message: string, link?: string) {
+    const fullLink = link ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}${link}` : null;
+
+    const mailOptions = {
+      from: {
+        name: 'Smart Campus',
+        address: env.EMAIL_FROM || env.SMTP_USER!,
+      },
+      to: email,
+      subject: title,
+      html: this.getNotificationEmailTemplate(title, message, fullLink),
+      text: `${title}\n\n${message}${fullLink ? `\n\nView details: ${fullLink}` : ''}`,
+    };
+
+    try {
+      const info = await this.transporter.sendMail(mailOptions);
+      return { success: true, messageId: info.messageId };
+    } catch (error) {
+      console.error('❌ Failed to send notification email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Notification Email Template
+   */
+  private getNotificationEmailTemplate(title: string, message: string, link: string | null): string {
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>${title}</title>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+          .container { background-color: #f9f9f9; border-radius: 10px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+          .header { text-align: center; margin-bottom: 30px; }
+          .logo { font-size: 32px; font-weight: bold; color: #4F46E5; margin-bottom: 10px; }
+          .content { background-color: white; padding: 30px; border-radius: 8px; }
+          h1 { color: #1F2937; margin-top: 0; font-size: 24px; }
+          .button { display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
+          .footer { text-align: center; margin-top: 30px; color: #6B7280; font-size: 14px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div class="logo">🎓 Smart Campus</div>
+          </div>
+          <div class="content">
+            <h1>${title}</h1>
+            <p>${message}</p>
+            ${link ? `<a href="${link}" class="button">View Details</a>` : ''}
+          </div>
+          <div class="footer">
+            <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
+            <p>This is an automated email, please do not reply.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+  }
 }
 
 export default new EmailService();
