@@ -243,6 +243,17 @@ router.get('/', (req, res) => {
         respond: 'PUT /api/v1/feedback/:id/respond',
         delete: 'DELETE /api/v1/feedback/:id',
       },
+      enrollments: {
+        enroll: 'POST /api/v1/enrollments/enroll',
+        getByStudent: 'GET /api/v1/enrollments/student/:studentId',
+        getByBatch: 'GET /api/v1/enrollments/batch/:batchId',
+        withdraw: 'DELETE /api/v1/enrollments/:id/withdraw',
+      },
+      notifications: {
+        getMyNotifications: 'GET /api/v1/notifications/my-notifications',
+        markAsRead: 'PUT /api/v1/notifications/:id/read',
+        markAllAsRead: 'PUT /api/v1/notifications/read-all',
+      },
     },
   });
 });
