@@ -38,3 +38,9 @@ coverage/
 
 # Misc
 *.tsbuildinfo
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.pyc
