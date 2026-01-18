@@ -23,6 +23,7 @@ import performanceRoutes from './performance.routes';
 import feedbackRoutes from './feedback.routes';
 import enrollmentRoutes from './enrollment.routes';
 import notificationRoutes from './notification.routes';
+import aiRoutes from './ai.routes';
 
 const router = Router();
 
@@ -51,6 +52,7 @@ router.use('/performance', performanceRoutes);
 router.use('/feedback', feedbackRoutes);
 router.use('/enrollments', enrollmentRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/ai', aiRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -243,6 +245,22 @@ router.get('/', (req, res) => {
         respond: 'PUT /api/v1/feedback/:id/respond',
         delete: 'DELETE /api/v1/feedback/:id',
       },
+      enrollments: {
+        enroll: 'POST /api/v1/enrollments/enroll',
+        getByStudent: 'GET /api/v1/enrollments/student/:studentId',
+        getByBatch: 'GET /api/v1/enrollments/batch/:batchId',
+        withdraw: 'DELETE /api/v1/enrollments/:id/withdraw',
+      },
+      notifications: {
+        getMyNotifications: 'GET /api/v1/notifications/my-notifications',
+        markAsRead: 'PUT /api/v1/notifications/:id/read',
+        markAllAsRead: 'PUT /api/v1/notifications/read-all',
+      },
+      ai: {
+        predictExamRisk: 'POST /api/v1/ai/predict-exam-risk',
+        trainModel: 'POST /api/v1/ai/train-model',
+        getStudentFeatures: 'GET /api/v1/ai/student-features',
+      }
     },
   });
 });

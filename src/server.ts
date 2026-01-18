@@ -4,6 +4,7 @@ import { initializeDatabase } from './config/database';
 import { logger } from './utils/logger';
 import { createServer } from 'http';
 import { setupSocketIO } from './config/socket';
+import schedulerService from './services/scheduler.service';
 
 const PORT = process.env.PORT || 5000;
 
@@ -19,6 +20,9 @@ const startServer = async () => {
 
     const httpServer = createServer(app);
     setupSocketIO(httpServer);
+
+    // Start Scheduler for AI Predictions
+    schedulerService.start();
 
     // Start server
     const server = httpServer.listen(PORT, () => {
@@ -42,6 +46,9 @@ const startServer = async () => {
 
       server.close(async () => {
         console.log('🛑 HTTP server closed');
+
+        // Stop Scheduler
+        schedulerService.stop();
 
         try {
           // Close database connection

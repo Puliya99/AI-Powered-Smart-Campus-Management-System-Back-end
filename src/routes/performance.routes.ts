@@ -18,15 +18,29 @@ router.get(
 // Get aggregated metrics for current lecturer
 router.get(
   '/lecturer/me',
-  authMiddleware.authorize(Role.LECTURER),
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN),
   performanceController.getLecturerPerformance.bind(performanceController)
 );
 
 // Admin view: All lecturers performance
 router.get(
   '/admin/all-lecturers',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.STUDENT, Role.USER),
   performanceController.getAllLecturersPerformance.bind(performanceController)
+);
+
+// Get performance metrics for a specific batch
+router.get(
+  '/batch/:batchId',
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.STUDENT, Role.USER),
+  performanceController.getBatchPerformance.bind(performanceController)
+);
+
+// Get AI predictions center-wise
+router.get(
+  '/ai-predictions',
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.STUDENT, Role.USER),
+  performanceController.getCenterPredictions.bind(performanceController)
 );
 
 export default router;
