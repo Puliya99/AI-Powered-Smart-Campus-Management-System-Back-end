@@ -23,6 +23,7 @@ import performanceRoutes from './performance.routes';
 import feedbackRoutes from './feedback.routes';
 import enrollmentRoutes from './enrollment.routes';
 import notificationRoutes from './notification.routes';
+import aiRoutes from './ai.routes';
 
 const router = Router();
 
@@ -51,6 +52,7 @@ router.use('/performance', performanceRoutes);
 router.use('/feedback', feedbackRoutes);
 router.use('/enrollments', enrollmentRoutes);
 router.use('/notifications', notificationRoutes);
+router.use('/ai', aiRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -254,6 +256,11 @@ router.get('/', (req, res) => {
         markAsRead: 'PUT /api/v1/notifications/:id/read',
         markAllAsRead: 'PUT /api/v1/notifications/read-all',
       },
+      ai: {
+        predictExamRisk: 'POST /api/v1/ai/predict-exam-risk',
+        trainModel: 'POST /api/v1/ai/train-model',
+        getStudentFeatures: 'GET /api/v1/ai/student-features',
+      }
     },
   });
 });
