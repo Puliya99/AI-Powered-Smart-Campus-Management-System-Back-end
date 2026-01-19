@@ -1,23 +1,43 @@
 import os
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+import numpy as np
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
 from typing import List, Optional, Dict
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 import datetime
+import json
+import faiss
+from sentence_transformers import SentenceTransformer
+from pypdf import PdfReader
+from docx import Document
+from pptx import Presentation
+import io
+import google.generativeai as genai
 
-app = FastAPI(title="Exam Failure Risk Prediction API")
+app = FastAPI(title="Campus AI Analytics & RAG API")
+
+# Configure Gemini
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+model = genai.GenerativeModel("gemini-1.5-pro")
+
+# Embedding Model
+print("Loading Embedding Model...")
+embed_model = SentenceTransformer('all-MiniLM-L6-v2')
 
 MODEL_DIR = "models"
-if not os.path.exists(MODEL_DIR):
-    os.makedirs(MODEL_DIR)
+INDEX_DIR = "indices"
+for d in [MODEL_DIR, INDEX_DIR]:
+    if not os.path.exists(d):
+        os.makedirs(d)
 
 DEFAULT_MODEL_PATH = os.path.join(MODEL_DIR, "model_v1.pkl")
 METADATA_PATH = os.path.join(MODEL_DIR, "metadata.json")
 
-import json
+# FAISS Indices storage
+indices = {} # courseId -> {index, chunks}
 
 def save_metadata(metadata):
     with open(METADATA_PATH, 'w') as f:
@@ -181,6 +201,156 @@ def fallback_predict(data: StudentData):
         "risk_score": score,
         "risk_level": risk_level,
         "reasons": reasons
+    }
+
+# --- RAG Endpoints ---
+
+class ChatRequest(BaseModel):
+    courseId: str
+    question: str
+    top_k: Optional[int] = 5
+
+class ChunkData(BaseModel):
+    content: str
+    metadata: Dict
+
+def extract_text_from_file(file_content: bytes, filename: str) -> List[ChunkData]:
+    chunks = []
+    ext = filename.split('.')[-1].lower()
+    
+    if ext == 'pdf':
+        reader = PdfReader(io.BytesIO(file_content))
+        for i, page in enumerate(reader.pages):
+            text = page.extract_text()
+            if text.strip():
+                # Simple chunking by page
+                chunks.append(ChunkData(content=text.strip(), metadata={"page": i + 1}))
+    elif ext == 'docx':
+        doc = Document(io.BytesIO(file_content))
+        current_text = ""
+        for i, para in enumerate(doc.paragraphs):
+            current_text += para.text + "\n"
+            if len(current_text) > 1000: # chunk size ~1000 chars
+                chunks.append(ChunkData(content=current_text.strip(), metadata={"paragraph_index": i}))
+                current_text = ""
+        if current_text:
+            chunks.append(ChunkData(content=current_text.strip(), metadata={"paragraph_index": len(doc.paragraphs)}))
+    elif ext == 'pptx':
+        prs = Presentation(io.BytesIO(file_content))
+        for i, slide in enumerate(prs.slides):
+            text = ""
+            for shape in slide.shapes:
+                if hasattr(shape, "text"):
+                    text += shape.text + " "
+            if text.strip():
+                chunks.append(ChunkData(content=text.strip(), metadata={"slide": i + 1}))
+    else:
+        # Generic text
+        text = file_content.decode('utf-8', errors='ignore')
+        for i in range(0, len(text), 1000):
+            chunks.append(ChunkData(content=text[i:i+1000], metadata={"offset": i}))
+            
+    return chunks
+
+@app.post("/process-material")
+async def process_material(courseId: str = Form(...), materialId: str = Form(...), file: UploadFile = File(...)):
+    content = await file.read()
+    chunks = extract_text_from_file(content, file.filename)
+    
+    if not chunks:
+        return {"message": "No text extracted", "chunks": []}
+    
+    # Store in memory/index for this course
+    texts = [c.content for c in chunks]
+    embeddings = embed_model.encode(texts)
+    
+    dim = embeddings.shape[1]
+    if courseId not in indices:
+        indices[courseId] = {
+            "index": faiss.IndexFlatL2(dim),
+            "chunks": []
+        }
+    
+    start_idx = len(indices[courseId]["chunks"])
+    indices[courseId]["index"].add(embeddings.astype('float32'))
+    
+    processed_chunks = []
+    for i, c in enumerate(chunks):
+        chunk_info = {
+            "id": f"{materialId}_{start_idx + i}",
+            "materialId": materialId,
+            "content": c.content,
+            "metadata": c.metadata,
+            "global_idx": start_idx + i
+        }
+        indices[courseId]["chunks"].append(chunk_info)
+        processed_chunks.append(chunk_info)
+        
+    return {
+        "message": f"Processed {len(chunks)} chunks",
+        "chunks": processed_chunks
+    }
+
+def build_prompt(question: str, chunks: list):
+    sources = []
+    for i, c in enumerate(chunks, start=1):
+        sources.append(f"[S{i}] {c['content']}")
+
+    return f"""
+You are a university lecture assistant.
+
+RULES:
+- Answer ONLY using the SOURCES
+- If not found, say: "I can't find this in the uploaded lecture materials."
+- Cite sources like [S1], [S2]
+
+QUESTION:
+{question}
+
+SOURCES:
+{chr(10).join(sources)}
+"""
+
+@app.post("/chat")
+async def chat(request: ChatRequest):
+    if request.courseId not in indices or not indices[request.courseId]["chunks"]:
+        return {
+            "answer": "I don't have any materials for this course yet. Please upload some lecture notes first.",
+            "citations": []
+        }
+    
+    # 1. Embed question
+    q_emb = embed_model.encode([request.question])
+    
+    # 2. Search FAISS
+    D, I = indices[request.courseId]["index"].search(q_emb.astype('float32'), request.top_k)
+    
+    retrieved_chunks = []
+    for idx in I[0]:
+        if idx != -1 and idx < len(indices[request.courseId]["chunks"]):
+            chunk = indices[request.courseId]["chunks"][idx]
+            retrieved_chunks.append(chunk)
+            
+    # 3. Call Gemini
+    prompt = build_prompt(request.question, retrieved_chunks)
+    try:
+        response = model.generate_content(prompt)
+        answer = response.text
+    except Exception as e:
+        print(f"Error calling Gemini: {e}")
+        answer = "I'm sorry, I'm having trouble connecting to my AI brain right now."
+
+    return {
+        "answer": answer,
+        "citations": [
+            {
+                "source": f"S{i+1}",
+                "materialId": c["materialId"],
+                "metadata": c["metadata"],
+                "snippet": c["content"][:150]
+            }
+            for i, c in enumerate(retrieved_chunks)
+        ]
     }
 
 if __name__ == "__main__":
