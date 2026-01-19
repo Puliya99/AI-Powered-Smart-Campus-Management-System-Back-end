@@ -43,6 +43,16 @@ The backend is built using **Node.js, Express, TypeScript, PostgreSQL, and TypeO
 
 ## 🚀 Getting Started
 
+### 0️⃣ AI Service Setup (Required for AI Analytics)
+Before starting the backend, the AI module must be running:
+```bash
+cd ai-module
+# Activate virtual environment
+source venv/bin/activate
+# Start the AI service on the port specified in .env (default 8001)
+python main.py 8001
+```
+
 ### 1️⃣ Installation
 ```bash
 npm install
@@ -149,7 +159,6 @@ Unit and integration tests are managed via **Jest**.
 ```bash
 # Run tests
 npm test
-# TODO: Add specific test scripts if they are defined in package.json
 ```
 
 ---
