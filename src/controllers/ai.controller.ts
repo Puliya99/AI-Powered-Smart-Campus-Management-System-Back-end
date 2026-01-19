@@ -91,6 +91,45 @@ export class AiController {
       });
     }
   }
+
+  async processMaterial(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const result = await aiService.processLectureMaterial(id);
+      res.json({
+        status: 'success',
+        message: 'Material processed successfully',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
+
+  async askQuestion(req: Request, res: Response) {
+    try {
+      const { courseId, question } = req.body;
+      if (!courseId || !question) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'courseId and question are required',
+        });
+      }
+      const result = await aiService.askQuestion(courseId, question);
+      res.json({
+        status: 'success',
+        data: result,
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message,
+      });
+    }
+  }
 }
 
 export default new AiController();
