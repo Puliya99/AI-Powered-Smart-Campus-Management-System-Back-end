@@ -15,6 +15,10 @@ import { PaymentStatus } from '../enums/PaymentStatus.enum';
 import { Prediction } from '../entities/Prediction.entity';
 import { RiskLevel } from '../enums/RiskLevel.enum';
 import axios from 'axios';
+import FormData from 'form-data';
+import fs from 'fs';
+import { LectureNote } from '../entities/LectureNote.entity';
+import { MaterialChunk } from '../entities/MaterialChunk.entity';
 
 export class AiService {
   private studentRepository = AppDataSource.getRepository(Student);
@@ -27,6 +31,8 @@ export class AiService {
   private enrollmentRepository = AppDataSource.getRepository(Enrollment);
   private predictionRepository = AppDataSource.getRepository(Prediction);
   private moduleRepository = AppDataSource.getRepository(Module);
+  private lectureNoteRepository = AppDataSource.getRepository(LectureNote);
+  private chunkRepository = AppDataSource.getRepository(MaterialChunk);
 
   private readonly AI_SERVICE_URL = process.env.AI_SERVICE_URL || 'http://localhost:8001';
 
@@ -269,6 +275,64 @@ export class AiService {
     }
     console.log(`✅ Batch predictions completed. Generated ${count} predictions.`);
     return { generated: count };
+  }
+
+  async processLectureMaterial(noteId: string) {
+    const note = await this.lectureNoteRepository.findOne({
+      where: { id: noteId },
+      relations: ['module']
+    });
+
+    if (!note || !note.fileUrl) {
+      throw new Error('Lecture note or file not found');
+    }
+
+    const filePath = note.fileUrl.startsWith('./') ? note.fileUrl : `./${note.fileUrl}`;
+    if (!fs.existsSync(filePath)) {
+      throw new Error(`File not found at ${filePath}`);
+    }
+
+    const formData = new FormData();
+    formData.append('courseId', note.module.id);
+    formData.append('materialId', note.id);
+    formData.append('file', fs.createReadStream(filePath));
+
+    try {
+      const response = await axios.post(`${this.AI_SERVICE_URL}/process-material`, formData, {
+        headers: { ...formData.getHeaders() }
+      });
+
+      const { chunks } = response.data;
+      
+      // Save chunks to database
+      const chunkEntities = chunks.map((c: any, index: number) => {
+        const chunk = new MaterialChunk();
+        chunk.lectureNote = { id: noteId } as LectureNote;
+        chunk.content = c.content;
+        chunk.chunkIndex = index;
+        chunk.metadata = c.metadata;
+        return chunk;
+      });
+
+      await this.chunkRepository.save(chunkEntities);
+      return { status: 'success', chunkCount: chunks.length };
+    } catch (error) {
+      console.error('Error processing material in AI service:', error);
+      throw new Error('Failed to process material in AI service');
+    }
+  }
+
+  async askQuestion(courseId: string, question: string) {
+    try {
+      const response = await axios.post(`${this.AI_SERVICE_URL}/chat`, {
+        courseId,
+        question
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Error in AI chat service:', error);
+      throw new Error('Failed to get answer from AI service');
+    }
   }
 }
 
