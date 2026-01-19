@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from "typeorm";
 import { Lecturer } from "./Lecturer.entity";
 import { Module } from "./Module.entity";
+import { MaterialChunk } from "./MaterialChunk.entity";
 
 @Entity()
 export class LectureNote {
@@ -12,6 +13,9 @@ export class LectureNote {
 
   @ManyToOne(() => Module, module => module.lectureNotes)
   module: Module;
+
+  @OneToMany(() => MaterialChunk, chunk => chunk.lectureNote)
+  chunks: MaterialChunk[];
 
   @Column({ type: 'varchar', length: 200 })
   title: string;
