@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "test-predict": "ts-node src/scripts/test-prediction.ts",
     "build": "tsc",
+    "test": "jest",
     "typeorm": "typeorm-ts-node-commonjs"
   },
   "keywords": [],
