@@ -24,10 +24,12 @@ import feedbackRoutes from './feedback.routes';
 import enrollmentRoutes from './enrollment.routes';
 import notificationRoutes from './notification.routes';
 import aiRoutes from './ai.routes';
+import kioskRoutes from './kiosk.routes';
 
 const router = Router();
 
 // Register routes
+router.use('/kiosk', kioskRoutes); // Public kiosk endpoints (no auth)
 router.use('/auth', authRoutes);
 router.use('/password', passwordResetRoutes);
 router.use('/dashboard', dashboardRoutes);
