@@ -7,7 +7,27 @@ import { Center } from '../entities/Center.entity';
 import { Batch } from '../entities/Batch.entity';
 import { Program } from '../entities/Program.entity';
 import { Schedule } from '../entities/Schedule.entity';
+import { WebAuthnCredential } from '../entities/WebAuthnCredential.entity';
 import emailService from '../services/email.service';
+import attendanceService from '../services/attendance.service';
+import { env } from '../config/env';
+import {
+  generateRegistrationOptions,
+  verifyRegistrationResponse,
+} from '@simplewebauthn/server';
+import type {
+  AuthenticatorTransportFuture,
+} from '@simplewebauthn/server';
+
+// In-memory challenge store for WebAuthn registration
+const registrationChallenges = new Map<string, { challenge: string; expiresAt: number }>();
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of registrationChallenges.entries()) {
+    if (now > value.expiresAt) registrationChallenges.delete(key);
+  }
+}, 60000);
 
 export class StudentController {
   private studentRepository = AppDataSource.getRepository(Student);
@@ -16,6 +36,7 @@ export class StudentController {
   private centerRepository = AppDataSource.getRepository(Center);
   private batchRepository = AppDataSource.getRepository(Batch);
   private programRepository = AppDataSource.getRepository(Program);
+  private credentialRepository = AppDataSource.getRepository(WebAuthnCredential);
 
   // Get all students with pagination and filters
   async getAllStudents(req: Request, res: Response) {
@@ -132,6 +153,34 @@ export class StudentController {
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to fetch student',
+      });
+    }
+  }
+
+  // Get currently logged in student's own profile
+  async getMyProfile(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['user'],
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Student record not found',
+        });
+      }
+
+      return res.json({
+        status: 'success',
+        data: { student },
+      });
+    } catch (error: any) {
+      return res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch student profile',
       });
     }
   }
@@ -595,6 +644,334 @@ export class StudentController {
         status: 'error',
         message: error.message || 'Failed to fetch students',
       });
+    }
+  }
+
+  // ==================== WebAuthn Registration ====================
+
+  // Start WebAuthn fingerprint registration
+  async webauthnRegisterStart(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+        relations: ['user', 'webauthnCredentials'],
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      // Get existing credentials to exclude
+      const existingCredentials = student.webauthnCredentials || [];
+
+      const options = await generateRegistrationOptions({
+        rpName: env.WEBAUTHN_RP_NAME,
+        rpID: env.WEBAUTHN_RP_ID,
+        userName: student.user.email,
+        userDisplayName: `${student.user.firstName} ${student.user.lastName}`,
+        attestationType: 'none',
+        excludeCredentials: existingCredentials.map(cred => ({
+          id: cred.credentialId,
+          transports: (cred.transports || []) as AuthenticatorTransportFuture[],
+        })),
+        authenticatorSelection: {
+          authenticatorAttachment: 'platform',
+          userVerification: 'required',
+          residentKey: 'preferred',
+        },
+      });
+
+      // Store challenge with 120-second TTL
+      registrationChallenges.set(userId, {
+        challenge: options.challenge,
+        expiresAt: Date.now() + 120000,
+      });
+
+      return res.json({ status: 'success', data: { options } });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to start registration' });
+    }
+  }
+
+  // Finish WebAuthn fingerprint registration
+  async webauthnRegisterFinish(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const { registrationResponse, deviceName } = req.body;
+
+      if (!registrationResponse) {
+        return res.status(400).json({ status: 'error', message: 'registrationResponse is required' });
+      }
+
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      // Retrieve stored challenge
+      const stored = registrationChallenges.get(userId);
+      if (!stored || Date.now() > stored.expiresAt) {
+        registrationChallenges.delete(userId);
+        return res.status(400).json({ status: 'error', message: 'Registration challenge expired. Please try again.' });
+      }
+      registrationChallenges.delete(userId);
+
+      const verification = await verifyRegistrationResponse({
+        response: registrationResponse,
+        expectedChallenge: stored.challenge,
+        expectedOrigin: env.WEBAUTHN_ORIGIN,
+        expectedRPID: env.WEBAUTHN_RP_ID,
+      });
+
+      if (!verification.verified || !verification.registrationInfo) {
+        return res.status(400).json({ status: 'error', message: 'Registration verification failed' });
+      }
+
+      const { credential, credentialBackedUp, credentialDeviceType } = verification.registrationInfo;
+
+      // Save credential to database
+      const webauthnCredential = this.credentialRepository.create({
+        credentialId: credential.id,
+        credentialPublicKey: Buffer.from(credential.publicKey).toString('base64url'),
+        counter: credential.counter,
+        credentialBackedUp: credentialBackedUp,
+        credentialDeviceType: credentialDeviceType,
+        transports: credential.transports as string[] || [],
+        deviceName: deviceName || 'My Device',
+        student: student,
+      });
+
+      await this.credentialRepository.save(webauthnCredential);
+
+      return res.json({
+        status: 'success',
+        message: 'Fingerprint registered successfully',
+        data: {
+          credential: {
+            id: webauthnCredential.id,
+            deviceName: webauthnCredential.deviceName,
+            createdAt: webauthnCredential.createdAt,
+          },
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to complete registration' });
+    }
+  }
+
+  // Get registered WebAuthn credentials for logged-in student
+  async getWebauthnCredentials(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      const credentials = await this.credentialRepository.find({
+        where: { student: { id: student.id } },
+        select: ['id', 'deviceName', 'credentialDeviceType', 'createdAt'],
+        order: { createdAt: 'DESC' },
+      });
+
+      return res.json({ status: 'success', data: { credentials } });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch credentials' });
+    }
+  }
+
+  // Delete a WebAuthn credential
+  async deleteWebauthnCredential(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const { credentialId } = req.params;
+
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      const credential = await this.credentialRepository.findOne({
+        where: { id: credentialId, student: { id: student.id } },
+      });
+
+      if (!credential) {
+        return res.status(404).json({ status: 'error', message: 'Credential not found' });
+      }
+
+      await this.credentialRepository.remove(credential);
+
+      return res.json({ status: 'success', message: 'Credential deleted successfully' });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to delete credential' });
+    }
+  }
+
+  // ==================== Passkey Management ====================
+
+  // Get my passkey (student)
+  async getMyPasskey(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+        select: ['id', 'passkey', 'passkeyRegeneratedAt'],
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      return res.json({
+        status: 'success',
+        data: {
+          passkey: student.passkey,
+          regeneratedAt: student.passkeyRegeneratedAt,
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch passkey' });
+    }
+  }
+
+  // Generate passkey for logged-in student
+  async generateMyPasskey(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student record not found' });
+      }
+
+      const passkey = await attendanceService.generateUniquePasskey();
+      student.passkey = passkey;
+      student.passkeyRegeneratedAt = new Date();
+      student.passkeyRegeneratedBy = 'self';
+      await this.studentRepository.save(student);
+
+      return res.json({
+        status: 'success',
+        message: 'Passkey generated successfully',
+        data: { passkey },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to generate passkey' });
+    }
+  }
+
+  // Admin: Regenerate passkey for a student
+  async regenerateStudentPasskey(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const adminUserId = (req as any).user.userId;
+
+      const student = await this.studentRepository.findOne({
+        where: { id },
+      });
+
+      if (!student) {
+        return res.status(404).json({ status: 'error', message: 'Student not found' });
+      }
+
+      // Get admin name for audit trail
+      const adminUser = await this.userRepository.findOne({
+        where: { id: adminUserId },
+        select: ['firstName', 'lastName'],
+      });
+      const adminName = adminUser ? `${adminUser.firstName} ${adminUser.lastName}` : 'Unknown Admin';
+
+      const passkey = await attendanceService.generateUniquePasskey();
+      student.passkey = passkey;
+      student.passkeyRegeneratedAt = new Date();
+      student.passkeyRegeneratedBy = adminName;
+      await this.studentRepository.save(student);
+
+      return res.json({
+        status: 'success',
+        message: 'Passkey regenerated successfully',
+        data: { passkey },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to regenerate passkey' });
+    }
+  }
+
+  // Admin: Get students with fingerprint/passkey status
+  async getStudentsWithFingerprintStatus(req: Request, res: Response) {
+    try {
+      const { page = 1, limit = 10, search = '', status: filterStatus } = req.query;
+      const skip = (Number(page) - 1) * Number(limit);
+
+      const queryBuilder = this.studentRepository
+        .createQueryBuilder('student')
+        .leftJoinAndSelect('student.user', 'user')
+        .leftJoin('student.webauthnCredentials', 'credentials')
+        .addSelect('COUNT(credentials.id)', 'credentialCount')
+        .groupBy('student.id')
+        .addGroupBy('user.id')
+        .skip(skip)
+        .take(Number(limit));
+
+      if (search) {
+        queryBuilder.where(
+          '(user.firstName ILIKE :search OR user.lastName ILIKE :search OR student.universityNumber ILIKE :search)',
+          { search: `%${search}%` }
+        );
+      }
+
+      const students = await queryBuilder.getRawAndEntities();
+
+      const result = students.entities.map((student, index) => {
+        const raw = students.raw[index];
+        return {
+          id: student.id,
+          universityNumber: student.universityNumber,
+          name: `${student.user.firstName} ${student.user.lastName}`,
+          email: student.user.email,
+          passkey: student.passkey,
+          passkeyRegeneratedAt: student.passkeyRegeneratedAt,
+          passkeyRegeneratedBy: student.passkeyRegeneratedBy,
+          fingerprintId: student.fingerprintId,
+          credentialCount: parseInt(raw.credentialCount || '0', 10),
+          status: (student.passkey || student.fingerprintId || parseInt(raw.credentialCount || '0', 10) > 0)
+            ? 'Registered' : 'Unregistered',
+        };
+      });
+
+      // Filter by status if provided
+      let filtered = result;
+      if (filterStatus === 'Registered') {
+        filtered = result.filter(s => s.status === 'Registered');
+      } else if (filterStatus === 'Unregistered') {
+        filtered = result.filter(s => s.status === 'Unregistered');
+      }
+
+      return res.json({
+        status: 'success',
+        data: {
+          students: filtered,
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total: filtered.length,
+          },
+        },
+      });
+    } catch (error: any) {
+      return res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch fingerprint status' });
     }
   }
 }
