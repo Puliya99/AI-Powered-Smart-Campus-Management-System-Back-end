@@ -47,6 +47,11 @@ interface EnvConfig {
 
   // Frontend
   FRONTEND_URL: string;
+
+  // WebAuthn
+  WEBAUTHN_RP_NAME: string;
+  WEBAUTHN_RP_ID: string;
+  WEBAUTHN_ORIGIN: string;
 }
 
 const getEnv = (key: string, defaultValue?: string): string => {
@@ -121,6 +126,11 @@ export const env: EnvConfig = {
 
   // Frontend
   FRONTEND_URL: getEnv('FRONTEND_URL', 'http://localhost:3000'),
+
+  // WebAuthn
+  WEBAUTHN_RP_NAME: getEnv('WEBAUTHN_RP_NAME', 'Smart Campus'),
+  WEBAUTHN_RP_ID: getEnv('WEBAUTHN_RP_ID', 'localhost'),
+  WEBAUTHN_ORIGIN: getEnv('WEBAUTHN_ORIGIN', 'http://localhost:5173'),
 };
 
 // Validate critical environment variables

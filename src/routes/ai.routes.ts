@@ -27,8 +27,20 @@ router.get(
 
 router.get(
   '/predictions/student/:studentId',
-  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.STUDENT),
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.STUDENT, Role.USER),
   aiController.getPredictionHistory.bind(aiController)
+);
+
+router.post(
+  '/materials/:id/process',
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN),
+  aiController.processMaterial.bind(aiController)
+);
+
+router.post(
+  '/chat/ask',
+  authMiddleware.authorize(Role.STUDENT, Role.LECTURER, Role.ADMIN, Role.USER),
+  aiController.askQuestion.bind(aiController)
 );
 
 export default router;
