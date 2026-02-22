@@ -7,12 +7,36 @@ import { Enrollment } from '../entities/Enrollment.entity';
 import { AttendanceStatus } from '../enums/AttendanceStatus.enum';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { Between } from 'typeorm';
+import attendanceService from '../services/attendance.service';
 
 export class AttendanceController {
   private attendanceRepository = AppDataSource.getRepository(Attendance);
   private scheduleRepository = AppDataSource.getRepository(Schedule);
   private studentRepository = AppDataSource.getRepository(Student);
   private enrollmentRepository = AppDataSource.getRepository(Enrollment);
+
+  // Fingerprint scan endpoint: maps fingerprintId -> student and records entry/exit
+  async scanFingerprint(req: Request, res: Response) {
+    try {
+      const { fingerprintId, scheduleId, timestamp } = req.body || {};
+      if (!fingerprintId || typeof fingerprintId !== 'string') {
+        return res.status(400).json({ status: 'error', message: 'fingerprintId is required' });
+      }
+
+      const now = timestamp ? new Date(timestamp) : new Date();
+
+      // Find student by fingerprintId
+      const student = await attendanceService.findStudentByFingerprintId(fingerprintId);
+
+      // Process attendance using shared service
+      const result = await attendanceService.processAttendanceScan(student, scheduleId, now);
+
+      return res.json({ status: 'success', data: result });
+    } catch (error: any) {
+      const statusCode = error.statusCode || 500;
+      return res.status(statusCode).json({ status: 'error', code: error.code, message: error.message || 'Failed to process fingerprint scan' });
+    }
+  }
 
   // Get all attendance records with pagination and filters
   async getAllAttendance(req: Request, res: Response) {
@@ -26,6 +50,7 @@ export class AttendanceController {
         status = '',
         startDate = '',
         endDate = '',
+        centerId = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
       } = req.query;
@@ -39,6 +64,7 @@ export class AttendanceController {
         .leftJoinAndSelect('attendance.schedule', 'schedule')
         .leftJoinAndSelect('schedule.module', 'module')
         .leftJoinAndSelect('schedule.batch', 'batch')
+        .leftJoinAndSelect('schedule.center', 'center')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`attendance.${sortBy}`, sortOrder as 'ASC' | 'DESC');
@@ -64,6 +90,11 @@ export class AttendanceController {
       // Status filter
       if (status) {
         queryBuilder.andWhere('attendance.status = :status', { status });
+      }
+
+      // Center filter
+      if (centerId) {
+        queryBuilder.andWhere('schedule.centerId = :centerId', { centerId });
       }
 
       // Date range filter
