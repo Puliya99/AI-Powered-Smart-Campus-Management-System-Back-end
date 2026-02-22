@@ -46,6 +46,12 @@ router.post(
   attendanceController.markAttendance.bind(attendanceController)
 );
 
+// Fingerprint scan endpoint (requires authentication; consider API key for devices)
+router.post(
+  '/scan',
+  attendanceController.scanFingerprint.bind(attendanceController)
+);
+
 // Update attendance record (Lecturers and Admin)
 router.put(
   '/:id',
