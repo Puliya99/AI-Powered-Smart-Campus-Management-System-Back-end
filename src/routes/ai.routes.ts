@@ -33,7 +33,7 @@ router.get(
 
 router.post(
   '/materials/:id/process',
-  authMiddleware.authorize(Role.LECTURER, Role.ADMIN),
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.STUDENT),
   aiController.processMaterial.bind(aiController)
 );
 
