@@ -894,7 +894,7 @@ if __name__ == "__main__":
     import uvicorn
     import sys
 
-    port = 8002
+    port = 8001
     if len(sys.argv) > 1:
         try:
             port = int(sys.argv[1])
