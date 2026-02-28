@@ -32,6 +32,9 @@ export const AppDataSource = new DataSource(dbConfig);
 const createDatabaseIfNotExists = async (): Promise<void> => {
   const { Client } = require('pg');
 
+  // Define SSL settings for the raw client
+  const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+
   // Connect to postgres database to create our database
   const client = new Client({
     host: dbConfig.host,
@@ -39,6 +42,7 @@ const createDatabaseIfNotExists = async (): Promise<void> => {
     user: dbConfig.username,
     password: dbConfig.password,
     database: 'postgres', // Connect to default postgres database first
+    ssl: sslConfig,       // 👈 ADD THIS LINE
   });
 
   try {
@@ -52,14 +56,17 @@ const createDatabaseIfNotExists = async (): Promise<void> => {
     if (result.rowCount === 0) {
       // Database doesn't exist, create it
       console.log(`📦 Creating database: ${dbConfig.database}...`);
-      await client.query(`CREATE DATABASE ${dbConfig.database}`);
+      await client.query(`CREATE DATABASE "${dbConfig.database}"`); // Added quotes for safety
       console.log(`✅ Database '${dbConfig.database}' created successfully`);
     } else {
       console.log(`✅ Database '${dbConfig.database}' already exists`);
     }
   } catch (error) {
-    console.error('❌ Error creating database:', error);
-    throw error;
+    console.error('❌ Error checking/creating database:', error);
+    // In production (Neon), the DB usually already exists. 
+    // We don't want to crash the app if this check fails due to permissions, 
+    // so we might want to log it and continue.
+    // throw error; // <--- Comment this out if you want the app to proceed even if this check fails
   } finally {
     await client.end();
   }
