@@ -1,3 +1,4 @@
+import { DeepPartial } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { User } from '../entities/User.entity';
 import { Role } from '../enums/Role.enum';
@@ -109,7 +110,7 @@ export class UserService {
     }
 
     try {
-      const user = this.userRepository.create(userData);
+      const user = this.userRepository.create(userData as DeepPartial<User>);
       await this.userRepository.save(user);
 
       // Send account creation email
@@ -138,8 +139,8 @@ export class UserService {
         if (detail.includes('mobileNumber')) throw new Error('Mobile number already registered');
         if (detail.includes('registrationNumber')) {
           // Retry once with a different registration number if it failed
-          userData.registrationNumber = await this.generateRegistrationNumber(true);
-          const user = this.userRepository.create(userData);
+          userData.registrationNumber = await this.generateRegistrationNumber();
+          const user = this.userRepository.create(userData as DeepPartial<User>);
           await this.userRepository.save(user);
           const { password, ...userWithoutPassword } = user;
           return userWithoutPassword;

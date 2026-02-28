@@ -17,7 +17,7 @@ const dbConfig = {
   logging: true, // Always show SQL queries
   entities: [path.join(__dirname, '../entities/**/*.entity{.ts,.js}')],
   migrations: [path.join(__dirname, '../migrations/**/*{.ts,.js}')],
-  subscribers: [],
+  subscribers: [] as string[],
   ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
   extra: {
     max: 10, // Maximum pool size
