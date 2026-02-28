@@ -1,8 +1,9 @@
 import { BatchStatus } from '../enums/BatchStatus.enum';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, ManyToMany, JoinTable, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Enrollment } from "./Enrollment.entity";
 import { Program } from "./Program.entity";
 import { Schedule } from "./Schedule.entity";
+import { Center } from "./Center.entity";
 
 @Entity()
 export class Batch {
@@ -16,7 +17,7 @@ export class Batch {
   startDate: Date;
 
   @Column({ type: 'date', nullable: true })
-  endDate: Date;
+  endDate: Date | null;
 
   @ManyToOne(() => Program, program => program.batches)
   program: Program;
@@ -26,6 +27,14 @@ export class Batch {
 
   @OneToMany(() => Schedule, schedule => schedule.batch)
   schedules: Schedule[];
+
+  @ManyToMany(() => Center, center => center.batches)
+  @JoinTable({
+    name: 'batch_centers',
+    joinColumn: { name: 'batch_id', referencedColumnName: 'id' },
+    inverseJoinColumn: { name: 'center_id', referencedColumnName: 'id' }
+  })
+  centers: Center[];
 
   @Column({ type: 'enum', enum: BatchStatus, default: BatchStatus.ACTIVE })
   status: BatchStatus;

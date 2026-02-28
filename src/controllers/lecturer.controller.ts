@@ -4,6 +4,7 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { User } from '../entities/User.entity';
 import { Module } from '../entities/Module.entity';
 import { Schedule } from '../entities/Schedule.entity';
+import emailService from '../services/email.service';
 
 export class LecturerController {
   private lecturerRepository = AppDataSource.getRepository(Lecturer);
@@ -20,6 +21,7 @@ export class LecturerController {
         search = '',
         specialization = '',
         isActive = '',
+        centerId = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
       } = req.query;
@@ -56,6 +58,11 @@ export class LecturerController {
         queryBuilder.andWhere('user.isActive = :isActive', {
           isActive: isActive === 'true',
         });
+      }
+
+      // Center filter
+      if (centerId) {
+        queryBuilder.andWhere('center.id = :centerId', { centerId });
       }
 
       const [lecturers, total] = await queryBuilder.getManyAndCount();
@@ -219,9 +226,22 @@ export class LecturerController {
         homeNumber: lecturerData.homeNumber,
         address: lecturerData.address || 'Not provided',
         profilePic: lecturerData.profilePic,
+        center: lecturerData.centerId ? { id: lecturerData.centerId } : undefined,
       });
 
       const savedUser = await this.userRepository.save(user);
+
+      // Send account creation email
+      try {
+        await emailService.sendAccountCreationEmail(
+          savedUser.email,
+          savedUser.firstName,
+          savedUser.username,
+          lecturerData.password || 'Lecturer123'
+        );
+      } catch (emailError) {
+        console.error('Failed to send account creation email for lecturer:', emailError);
+      }
 
       // Create lecturer record
       const lecturer = this.lecturerRepository.create({
@@ -245,9 +265,22 @@ export class LecturerController {
         data: { lecturer: completeLecturer },
       });
     } catch (error: any) {
+      let message = error.message || 'Failed to create lecturer';
+      
+      // Handle TypeORM unique constraint errors
+      if (error.code === '23505') {
+        const detail = error.detail || '';
+        if (detail.includes('email')) message = 'Email already registered';
+        else if (detail.includes('username')) message = 'Username already taken';
+        else if (detail.includes('nic')) message = 'NIC already registered';
+        else if (detail.includes('mobileNumber')) message = 'Mobile number already registered';
+        else if (detail.includes('registrationNumber')) message = 'Registration number already exists';
+        else message = 'Resource already exists';
+      }
+
       res.status(400).json({
         status: 'error',
-        message: error.message || 'Failed to create lecturer',
+        message,
       });
     }
   }
@@ -272,7 +305,13 @@ export class LecturerController {
 
       // Update user data
       if (updateData.user) {
-        await this.userRepository.update(lecturer.user.id, updateData.user);
+        // Handle center update if provided in user object
+        if (updateData.user.centerId !== undefined) {
+          updateData.user.center = updateData.user.centerId ? { id: updateData.user.centerId } : null;
+          delete updateData.user.centerId;
+        }
+
+        await this.userRepository.save({ ...lecturer.user, ...updateData.user });
       }
 
       // Update lecturer data
@@ -417,12 +456,66 @@ export class LecturerController {
     }
   }
 
+  // Get current lecturer profile
+  async getCurrentLecturerProfile(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+
+      const lecturer = await this.lecturerRepository.findOne({
+        where: { user: { id: userId } },
+        relations: [
+          'user',
+          'user.center',
+          'modules',
+          'modules.program',
+          'schedules',
+          'schedules.module',
+          'schedules.batch',
+          'lectureNotes',
+        ],
+      });
+
+      if (!lecturer) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Lecturer record not found',
+        });
+      }
+
+      res.json({
+        status: 'success',
+        data: { lecturer },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch lecturer profile',
+      });
+    }
+  }
+
   // Helper functions
   private async generateRegistrationNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.userRepository.count();
-    const number = String(count + 1).padStart(4, '0');
-    return `LEC${year}${number}`;
+    const prefix = `LEC${year}`;
+    
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.registrationNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('user.registrationNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.registrationNumber) {
+      const lastNumberStr = lastUser.registrationNumber.substring(prefix.length);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(4, '0');
+    return `${prefix}${number}`;
   }
 
   private generateNameWithInitials(firstName: string, lastName: string): string {

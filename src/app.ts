@@ -29,7 +29,22 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => {
+    // Skip rate limiting for static files if they are served through this middleware
+    return req.path.startsWith('/uploads');
+  },
 });
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 login/register requests per windowMs
+  message: 'Too many authentication attempts, please try again later.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/v1/auth/login', authLimiter);
+app.use('/api/v1/auth/register', authLimiter);
 app.use('/api', limiter);
 
 // Body Parser Middleware
@@ -64,6 +79,9 @@ app.get('/health', (req: Request, res: Response) => {
 
 // API Routes
 app.use(env.API_PREFIX, routes);
+
+// Serve Static Files
+app.use('/uploads', express.static(env.UPLOAD_PATH));
 
 // 404 Handler
 app.use((req: Request, res: Response) => {

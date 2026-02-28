@@ -6,6 +6,7 @@ import { env } from '../config/env';
 import bcrypt from 'bcryptjs';
 import { Role } from '../enums/Role.enum';
 import { Gender } from '../enums/Gender.enum';
+import emailService from './email.service';
 
 export class AuthService {
   private userRepository = AppDataSource.getRepository(User);
@@ -59,6 +60,20 @@ export class AuthService {
     });
 
     await this.userRepository.save(user);
+
+    // Send account creation email
+    if (user.email) {
+      try {
+        await emailService.sendAccountCreationEmail(
+          user.email,
+          user.firstName,
+          user.username,
+          data.password
+        );
+      } catch (emailError) {
+        console.error('Failed to send account creation email during registration:', emailError);
+      }
+    }
 
     // Generate token
     const token = this.generateToken(user.id, user.role);
@@ -144,7 +159,59 @@ export class AuthService {
     user.password = data.newPassword; // Will be hashed by entity hook
     await this.userRepository.save(user);
 
+    // Send password changed email
+    if (user.email) {
+      try {
+        await emailService.sendPasswordChangedEmail(user.email, user.firstName);
+      } catch (emailError) {
+        console.error('Failed to send password changed email:', emailError);
+      }
+    }
+
     return { message: 'Password changed successfully' };
+  }
+
+  // Update user profile
+  async updateProfile(userId: string, data: any) {
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new Error('User not found');
+    }
+
+    // Update allowed fields
+    const allowedFields = [
+      'firstName',
+      'lastName',
+      'title',
+      'gender',
+      'dateOfBirth',
+      'address',
+      'mobileNumber',
+      'homeNumber',
+      'profilePic',
+    ];
+
+    allowedFields.forEach(field => {
+      if (data[field] !== undefined) {
+        (user as any)[field] = data[field];
+      }
+    });
+
+    // Update name with initials if names changed
+    if (data.firstName || data.lastName) {
+      user.nameWithInitials = this.generateNameWithInitials(
+        user.firstName,
+        user.lastName
+      );
+    }
+
+    await this.userRepository.save(user);
+
+    const { password, ...userWithoutPassword } = user;
+    return userWithoutPassword;
   }
 
   // Logout (token invalidation would be handled client-side or with Redis)
@@ -162,16 +229,46 @@ export class AuthService {
   // Generate unique registration number
   private async generateRegistrationNumber(): Promise<string> {
     const year = new Date().getFullYear();
-    const count = await this.userRepository.count();
-    const number = String(count + 1).padStart(4, '0');
-    return `REG${year}${number}`;
+    const prefix = `REG${year}`;
+    
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.registrationNumber LIKE :prefix', { prefix: `${prefix}%` })
+      .orderBy('user.registrationNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.registrationNumber) {
+      const lastNumberStr = lastUser.registrationNumber.substring(prefix.length);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(4, '0');
+    return `${prefix}${number}`;
   }
 
   // Generate temporary unique mobile number
   private async generateTempMobileNumber(): Promise<string> {
-    const count = await this.userRepository.count();
-    const number = String(1000000000 + count + 1); // Starts from 1000000001
-    return number;
+    const lastUser = await this.userRepository
+      .createQueryBuilder('user')
+      .where('user.mobileNumber LIKE :prefix', { prefix: 'TEMP%' })
+      .orderBy('user.mobileNumber', 'DESC')
+      .getOne();
+
+    let nextNumber = 1;
+    if (lastUser && lastUser.mobileNumber && lastUser.mobileNumber.startsWith('TEMP')) {
+      const lastNumberStr = lastUser.mobileNumber.substring(4);
+      const lastNumber = parseInt(lastNumberStr, 10);
+      if (!isNaN(lastNumber)) {
+        nextNumber = lastNumber + 1;
+      }
+    }
+
+    const number = String(nextNumber).padStart(6, '0');
+    return `TEMP${number}`;
   }
 
   // Generate name with initials

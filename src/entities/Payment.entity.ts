@@ -11,6 +11,7 @@ import { PaymentMethod } from '../enums/PaymentMethod.enum';
 import { PaymentStatus } from '../enums/PaymentStatus.enum';
 import { Program } from './Program.entity';
 import { Student } from './Student.entity';
+import { Center } from './Center.entity';
 
 @Entity('payments')
 export class Payment {
@@ -25,6 +26,10 @@ export class Payment {
   @JoinColumn({ name: 'program_id' })
   program: Program;
 
+  @ManyToOne(() => Center)
+  @JoinColumn({ name: 'center_id' })
+  center: Center;
+
   @Column({ type: 'date' })
   paymentDate: Date;
 
@@ -38,8 +43,7 @@ export class Payment {
   transactionId: string;
 
   @Column({ type: 'date', nullable: true })
-  nextPaymentDate: Date;
-
+  nextPaymentDate: Date | null;
   @Column({ type: 'decimal', precision: 10, scale: 2, default: 0 })
   outstanding: number;
 
@@ -48,6 +52,9 @@ export class Payment {
 
   @Column({ type: 'text', nullable: true })
   remarks: string;
+
+  @Column({ type: 'varchar', nullable: true })
+  receiptUrl: string | null;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

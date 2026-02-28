@@ -18,10 +18,13 @@ router.get(
 // Get lecturers dropdown (for forms)
 router.get('/dropdown', lecturerController.getLecturersDropdown.bind(lecturerController));
 
-// Get lecturer statistics (Admin only)
+// Get current lecturer profile
+router.get('/profile/me', lecturerController.getCurrentLecturerProfile.bind(lecturerController));
+
+// Get lecturer statistics (Admin and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   lecturerController.getLecturerStats.bind(lecturerController)
 );
 

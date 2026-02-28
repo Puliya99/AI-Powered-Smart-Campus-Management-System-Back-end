@@ -5,7 +5,9 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "test-predict": "ts-node src/scripts/test-prediction.ts",
     "build": "tsc",
+    "test": "jest",
     "typeorm": "typeorm-ts-node-commonjs"
   },
   "keywords": [],
@@ -13,6 +15,8 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@simplewebauthn/server": "^13.2.3",
+    "@types/socket.io": "^3.0.1",
     "axios": "^1.13.2",
     "bcrypt": "^6.0.0",
     "bcryptjs": "^2.4.3",
@@ -31,7 +35,9 @@
     "nodemailer": "^7.0.12",
     "pg": "^8.16.3",
     "reflect-metadata": "^0.1.14",
+    "socket.io": "^4.8.3",
     "typeorm": "^0.3.28",
+    "uuid": "^13.0.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {
@@ -47,6 +53,7 @@
     "@types/node": "^20.19.27",
     "@types/nodemailer": "^7.0.4",
     "@types/supertest": "^6.0.3",
+    "@types/uuid": "^10.0.0",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.1",

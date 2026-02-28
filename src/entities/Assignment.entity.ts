@@ -1,15 +1,15 @@
-import { SubmissionStatus } from '../enums/SubmissionStatus.enum';
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn } from "typeorm";
-import { Student } from "./Student.entity";
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Module } from "./Module.entity";
+import { Lecturer } from "./Lecturer.entity";
+import { Submission } from "./Submission.entity";
 
-@Entity()
+@Entity('assignments')
 export class Assignment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
   @Column({ type: 'varchar', length: 200 })
-  assignmentName: string;
+  title: string;
 
   @Column({ type: 'text', nullable: true })
   description: string;
@@ -17,26 +17,17 @@ export class Assignment {
   @ManyToOne(() => Module, module => module.assignments)
   module: Module;
 
-  @ManyToOne(() => Student, student => student.assignments)
-  student: Student;
+  @ManyToOne(() => Lecturer)
+  lecturer: Lecturer;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'timestamp' })
   dueDate: Date;
 
-  @Column({ type: 'date', nullable: true })
-  submittedDate: Date;
-
   @Column({ type: 'varchar', length: 500, nullable: true })
-  submissionFile: string;
+  fileUrl: string;
 
-  @Column({ type: 'enum', enum: SubmissionStatus, default: SubmissionStatus.NOT_SUBMITTED })
-  submissionStatus: SubmissionStatus;
-
-  @Column({ type: 'int', nullable: true })
-  marks: number;
-
-  @Column({ type: 'int', nullable: true })
-  maxMarks: number;
+  @OneToMany(() => Submission, submission => submission.assignment)
+  submissions: Submission[];
 
   @CreateDateColumn()
   createdAt: Date;

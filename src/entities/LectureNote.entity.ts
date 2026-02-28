@@ -1,6 +1,7 @@
-import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn } from "typeorm";
+import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, CreateDateColumn, UpdateDateColumn, OneToMany } from "typeorm";
 import { Lecturer } from "./Lecturer.entity";
 import { Module } from "./Module.entity";
+import { MaterialChunk } from "./MaterialChunk.entity";
 
 @Entity()
 export class LectureNote {
@@ -13,8 +14,14 @@ export class LectureNote {
   @ManyToOne(() => Module, module => module.lectureNotes)
   module: Module;
 
+  @OneToMany(() => MaterialChunk, chunk => chunk.lectureNote)
+  chunks: MaterialChunk[];
+
   @Column({ type: 'varchar', length: 200 })
   title: string;
+
+  @Column({ type: 'enum', enum: ['TEXT', 'IMAGE', 'LINK', 'FILE'], default: 'FILE' })
+  type: 'TEXT' | 'IMAGE' | 'LINK' | 'FILE';
 
   @Column({ type: 'text', nullable: true })
   content: string;
@@ -22,7 +29,7 @@ export class LectureNote {
   @Column({ type: 'varchar', length: 500, nullable: true })
   fileUrl: string;
 
-  @Column({ type: 'date' })
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
   uploadDate: Date;
 
   @CreateDateColumn()

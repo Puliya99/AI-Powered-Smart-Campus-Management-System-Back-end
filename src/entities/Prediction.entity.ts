@@ -25,6 +25,9 @@ export class Prediction {
   @Column({ type: 'text', nullable: true })
   recommendation: string;
 
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  modelVersion: string;
+
   @Column({ type: 'date' })
   predictionDate: Date;
 

@@ -12,5 +12,8 @@ export * from './Prediction.entity';
 export * from './Program.entity';
 export * from './Result.entity';
 export * from './Schedule.entity';
+export * from './Setting.entity';
 export * from './Student.entity';
 export * from './User.entity';
+export * from './VideoMeeting.entity';
+export * from './MeetingParticipant.entity';

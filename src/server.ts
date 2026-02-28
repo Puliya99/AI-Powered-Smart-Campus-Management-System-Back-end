@@ -2,8 +2,11 @@ import app from './app';
 import { env, validateEnv } from './config/env';
 import { initializeDatabase } from './config/database';
 import { logger } from './utils/logger';
+import { createServer } from 'http';
+import { setupSocketIO } from './config/socket';
+import schedulerService from './services/scheduler.service';
 
-const PORT = process.env.PORT || 4000;
+const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   try {
@@ -15,8 +18,14 @@ const startServer = async () => {
     console.log('🔄 Connecting to database...');
     await initializeDatabase();
 
+    const httpServer = createServer(app);
+    setupSocketIO(httpServer);
+
+    // Start Scheduler for AI Predictions
+    schedulerService.start();
+
     // Start server
-    const server = app.listen(PORT, () => {
+    const server = httpServer.listen(PORT, () => {
       console.log(`
 ╔════════════════════════════════════════╗
 ║   🚀 Smart Campus API Server          ║
@@ -37,6 +46,9 @@ const startServer = async () => {
 
       server.close(async () => {
         console.log('🛑 HTTP server closed');
+
+        // Stop Scheduler
+        schedulerService.stop();
 
         try {
           // Close database connection

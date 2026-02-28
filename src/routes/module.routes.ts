@@ -14,27 +14,27 @@ router.get('/', moduleController.getAllModules.bind(moduleController));
 // Get modules dropdown (for forms)
 router.get('/dropdown', moduleController.getModulesDropdown.bind(moduleController));
 
-// Get module statistics (Admin and Lecturers)
+// Get module statistics (Admin, Lecturers, and Staff)
 router.get(
   '/stats',
-  authMiddleware.authorize(Role.ADMIN, Role.LECTURER),
+  authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.USER),
   moduleController.getModuleStats.bind(moduleController)
 );
 
 // Get module by ID
 router.get('/:id', moduleController.getModuleById.bind(moduleController));
 
-// Create module (Admin only)
+// Create module (Admin and Staff)
 router.post(
   '/',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   moduleController.createModule.bind(moduleController)
 );
 
-// Update module (Admin only)
+// Update module (Admin and Staff)
 router.put(
   '/:id',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   moduleController.updateModule.bind(moduleController)
 );
 

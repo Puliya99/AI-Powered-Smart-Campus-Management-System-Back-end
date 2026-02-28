@@ -9,6 +9,8 @@ import { Assignment } from '../entities/Assignment.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Schedule } from '../entities/Schedule.entity';
 import { Role } from '../enums/Role.enum';
+import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
+import { In, MoreThanOrEqual } from 'typeorm';
 
 export class DashboardService {
   private userRepository = AppDataSource.getRepository(User);
@@ -23,6 +25,9 @@ export class DashboardService {
 
   // Admin Dashboard Stats
   async getAdminDashboard() {
+    // Auto-complete finished schedules before fetching stats
+    await this.autoCompleteFinishedSchedules();
+
     const [
       totalStudents,
       totalLecturers,
@@ -74,6 +79,9 @@ export class DashboardService {
 
   // Student Dashboard Stats
   async getStudentDashboard(userId: string) {
+    // Auto-complete finished schedules before fetching stats
+    await this.autoCompleteFinishedSchedules();
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['student'],
@@ -86,7 +94,7 @@ export class DashboardService {
     // Get student data
     const student = await this.studentRepository.findOne({
       where: { user: { id: userId } },
-      relations: ['enrollments', 'attendances', 'assignments', 'results', 'payments'],
+      relations: ['enrollments', 'attendances', 'submissions', 'results', 'payments'],
     });
 
     if (!student) {
@@ -96,18 +104,19 @@ export class DashboardService {
     const [
       enrolledCourses,
       attendanceRate,
-      pendingAssignments,
+      completedAssignments,
       averageGrade,
       upcomingClasses,
       recentResults,
       paymentStatus,
+      enrolledModules,
     ] = await Promise.all([
       this.enrollmentRepository.count({
         where: { student: { id: student.id }, status: 'ACTIVE' as any },
       }),
       this.calculateAttendanceRate(student.id),
-      this.assignmentRepository.count({
-        where: { student: { id: student.id }, submissionStatus: 'NOT_SUBMITTED' as any },
+      AppDataSource.getRepository('Submission').count({
+        where: { student: { id: student.id } },
       }),
       this.calculateAverageGrade(student.id),
       this.getUpcomingClasses(student.id),
@@ -118,6 +127,7 @@ export class DashboardService {
         relations: ['module'],
       }),
       this.getPaymentStatus(student.id),
+      this.getEnrolledModules(student.id),
     ]);
 
     return {
@@ -129,17 +139,46 @@ export class DashboardService {
       stats: {
         enrolledCourses,
         attendanceRate: Math.round(attendanceRate),
-        pendingAssignments,
+        completedAssignments,
         averageGrade: averageGrade.toFixed(2),
       },
       upcomingClasses,
       recentResults,
       paymentStatus,
+      enrolledModules,
     };
+  }
+
+  private async getEnrolledModules(studentId: string) {
+    // Get programs the student is enrolled in
+    const enrollments = await this.enrollmentRepository.find({
+      where: { student: { id: studentId }, status: 'ACTIVE' as any },
+      relations: ['program', 'program.modules'],
+    });
+
+    const modules: any[] = [];
+    enrollments.forEach(enrollment => {
+      if (enrollment.program && enrollment.program.modules) {
+        enrollment.program.modules.forEach(module => {
+          modules.push({
+            id: module.id,
+            moduleCode: module.moduleCode,
+            moduleName: module.moduleName,
+            semesterNumber: module.semesterNumber,
+            credits: module.credits,
+          });
+        });
+      }
+    });
+
+    return modules;
   }
 
   // Lecturer Dashboard Stats
   async getLecturerDashboard(userId: string) {
+    // Auto-complete finished schedules before fetching stats
+    await this.autoCompleteFinishedSchedules();
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -168,18 +207,21 @@ export class DashboardService {
       this.scheduleRepository.count({
         where: { lecturer: { id: lecturer.id } },
       }),
-      this.scheduleRepository
-        .createQueryBuilder('schedule')
-        .where('schedule.lecturerId = :lecturerId', { lecturerId: lecturer.id })
-        .andWhere('DATE(schedule.date) = CURRENT_DATE')
-        .getCount(),
+      this.scheduleRepository.count({
+        where: { 
+          lecturer: { id: lecturer.id },
+          date: new Date().toISOString().split('T')[0] as any
+        },
+      }),
       this.getEnrolledStudentsCount(lecturer.id),
-      this.assignmentRepository
-        .createQueryBuilder('assignment')
-        .where('assignment.moduleId IN (SELECT id FROM module WHERE lecturerId = :lecturerId)', {
+      AppDataSource.getRepository('Submission')
+        .createQueryBuilder('submission')
+        .innerJoin('submission.assignment', 'assignment')
+        .innerJoin('assignment.module', 'module')
+        .where('module.lecturerId = :lecturerId', {
           lecturerId: lecturer.id,
         })
-        .andWhere('assignment.marks IS NULL')
+        .andWhere('submission.marks IS NULL')
         .getCount(),
       this.getLecturerUpcomingClasses(lecturer.id),
       this.getClassPerformance(lecturer.id),
@@ -203,6 +245,9 @@ export class DashboardService {
 
   // Staff Dashboard Stats
   async getStaffDashboard(userId: string) {
+    // Auto-complete finished schedules before fetching stats
+    await this.autoCompleteFinishedSchedules();
+
     const user = await this.userRepository.findOne({
       where: { id: userId },
     });
@@ -317,15 +362,39 @@ export class DashboardService {
   }
 
   private async getUpcomingClasses(studentId: string) {
-    // Placeholder - implement based on your schedule structure
-    return [];
+    const today = new Date().toISOString().split('T')[0];
+    
+    // Get active enrollments for the student
+    const enrollments = await this.enrollmentRepository.find({
+      where: { student: { id: studentId }, status: 'ACTIVE' as any },
+      relations: ['batch'],
+    });
+
+    const batchIds = enrollments.map(e => e.batch?.id).filter(id => !!id);
+
+    if (batchIds.length === 0) {
+      return [];
+    }
+
+    // Get upcoming schedules for these batches
+    return AppDataSource.getRepository(Schedule).find({
+      where: {
+        batch: { id: In(batchIds) },
+        date: MoreThanOrEqual(today as any),
+        status: ScheduleStatus.SCHEDULED,
+      },
+      take: 5,
+      relations: ['module', 'batch', 'lecturer', 'lecturer.user'],
+      order: { date: 'ASC', startTime: 'ASC' },
+    });
   }
 
   private async getLecturerUpcomingClasses(lecturerId: string) {
+    const today = new Date().toISOString().split('T')[0];
     return this.scheduleRepository.find({
       where: {
         lecturer: { id: lecturerId },
-        date: new Date(),
+        date: today as any,
       },
       take: 5,
       relations: ['module', 'batch'],
@@ -344,16 +413,63 @@ export class DashboardService {
   }
 
   private async getEnrolledStudentsCount(lecturerId: string): Promise<number> {
-    // Count unique students enrolled in lecturer's modules
-    return 0; // Placeholder
+    // Count unique students enrolled in programs that contain modules assigned to this lecturer
+    const count = await this.enrollmentRepository
+      .createQueryBuilder('enrollment')
+      .innerJoin('enrollment.program', 'program')
+      .innerJoin('program.modules', 'module')
+      .where('module.lecturerId = :lecturerId', { lecturerId })
+      .andWhere('enrollment.status = :status', { status: 'ACTIVE' })
+      .select('COUNT(DISTINCT enrollment.studentId)', 'count')
+      .getRawOne();
+
+    return parseInt(count.count || '0');
   }
 
   private async getClassPerformance(lecturerId: string) {
-    // Get average performance across all classes
+    // Get average performance across all modules assigned to this lecturer
+    const performance = await this.resultRepository
+      .createQueryBuilder('result')
+      .innerJoin('result.module', 'module')
+      .where('module.lecturerId = :lecturerId', { lecturerId })
+      .select('AVG((result.marks * 100.0) / result.maxMarks)', 'average')
+      .getRawOne();
+
+    const avg = parseFloat(performance.average || '0');
+
+    // For trend, we could compare with previous month, but for MVP let's return 'up' if > 50
     return {
-      average: 75,
-      trend: 'up',
+      average: Math.round(avg),
+      trend: avg >= 50 ? 'up' : 'down',
     };
+  }
+
+  // Internal helper to automatically complete finished schedules
+  private async autoCompleteFinishedSchedules() {
+    try {
+      const now = new Date();
+      const currentDate = now.toISOString().split('T')[0];
+      const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
+
+      // Find all scheduled sessions that have already ended
+      const finishedSchedules = await this.scheduleRepository
+        .createQueryBuilder('schedule')
+        .where('schedule.status = :status', { status: ScheduleStatus.SCHEDULED })
+        .andWhere('(schedule.date < :currentDate OR (schedule.date = :currentDate AND schedule.endTime < :currentTime))', {
+          currentDate,
+          currentTime,
+        })
+        .getMany();
+
+      if (finishedSchedules.length > 0) {
+        for (const schedule of finishedSchedules) {
+          schedule.status = ScheduleStatus.COMPLETED;
+        }
+        await this.scheduleRepository.save(finishedSchedules);
+      }
+    } catch (error) {
+      console.error('Error in autoCompleteFinishedSchedules:', error);
+    }
   }
 }
 
