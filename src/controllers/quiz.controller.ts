@@ -606,35 +606,78 @@ export class QuizController {
 
       await this.violationRepository.save(violation);
 
-      // Check violation counts for this attempt
-      const violationCount = await this.violationRepository.count({
+      // Professional weighted violation scoring system
+      // Each violation type has a different weight
+      const violationWeights: Record<string, number> = {
+        'NO_FACE': 1,
+        'MULTIPLE_FACES': 2,
+        'CAMERA_DISABLED': 3,
+        'TAB_SWITCH': 2,
+        'CHEATING_OBJECT': 3,
+        'LOOKING_AWAY': 1,
+        'HEAD_POSE': 1,
+      };
+
+      // Type-specific warning messages
+      const typeMessages: Record<string, string> = {
+        'NO_FACE': 'Face not detected',
+        'MULTIPLE_FACES': 'Multiple faces detected',
+        'CAMERA_DISABLED': 'Camera is disabled',
+        'TAB_SWITCH': 'Tab/window switch detected',
+        'CHEATING_OBJECT': 'Suspicious object detected (phone, book, etc.)',
+        'LOOKING_AWAY': 'Student looking away from screen',
+        'HEAD_POSE': 'Suspicious head movement detected',
+      };
+
+      // Calculate total weighted violation score for this attempt
+      const allViolations = await this.violationRepository.find({
         where: { attempt: { id: attemptId } }
       });
 
+      let totalScore = 0;
+      const violationCounts: Record<string, number> = {};
+
+      for (const v of allViolations) {
+        const weight = violationWeights[v.violationType] || 1;
+        totalScore += weight;
+        violationCounts[v.violationType] = (violationCounts[v.violationType] || 0) + 1;
+      }
+
+      const violationCount = allViolations.length;
       let responseMessage = 'Violation reported';
       let cancelled = false;
 
-      // Logic: Cancel only if explicitly requested (e.g. serious violation or persistent for 10s) 
-      // OR if it's the 5th violation (multiple warnings given first)
-      if (shouldCancel || violationCount >= 5) {
+      // Auto-cancel if:
+      // 1. Frontend explicitly requests cancellation (persistent violation)
+      // 2. Total weighted score exceeds threshold (5+)
+      // 3. Any single critical violation type occurs 3+ times
+      const criticalThreshold = totalScore >= 5;
+      const repeatedCritical = Object.entries(violationCounts).some(
+        ([type, count]) => ['CHEATING_OBJECT', 'CAMERA_DISABLED'].includes(type) && count >= 3
+      );
+
+      if (shouldCancel || criticalThreshold || repeatedCritical) {
         attempt.status = 'CANCELLED';
-        attempt.reason = details || `Multiple security violations reported (Type: ${violationType})`;
+        attempt.reason = details || `Security violations exceeded threshold (Score: ${totalScore}, Type: ${violationType})`;
         attempt.submittedTime = new Date();
         await this.attemptRepository.save(attempt);
         cancelled = true;
-        responseMessage = `Attempt cancelled: ${details || 'Security violation'}`;
+        responseMessage = `Attempt auto-submitted: ${details || typeMessages[violationType] || 'Security violation'} (Score: ${totalScore}/5)`;
       } else {
-        responseMessage = `Security Warning (${violationCount}/5): ${violationType}. Correction required!`;
+        const typeMsg = typeMessages[violationType] || violationType;
+        responseMessage = `Security Warning (Score: ${totalScore}/5): ${typeMsg}. Correction required!`;
       }
 
-      res.status(201).json({ 
-        status: 'success', 
-        message: responseMessage, 
-        data: { 
+      res.status(201).json({
+        status: 'success',
+        message: responseMessage,
+        data: {
           cancelled,
           violationCount,
+          totalScore,
+          violationCounts,
           warning: !cancelled
-        } 
+        }
       });
     } catch (error: any) {
       res.status(500).json({ status: 'error', message: error.message || 'Failed to report violation' });

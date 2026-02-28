@@ -10,7 +10,7 @@ export class QuizViolation {
   attempt: QuizAttempt;
 
   @Column({ type: 'varchar', length: 50 })
-  violationType: string; // 'NO_FACE', 'MULTIPLE_FACES', 'CAMERA_DISABLED'
+  violationType: string; // 'NO_FACE' | 'MULTIPLE_FACES' | 'CAMERA_DISABLED' | 'TAB_SWITCH' | 'CHEATING_OBJECT' | 'LOOKING_AWAY' | 'HEAD_POSE'
 
   @Column({ type: 'text', nullable: true })
   details: string | null;

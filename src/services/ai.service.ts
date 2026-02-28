@@ -327,7 +327,7 @@ export class AiService {
       const response = await axios.post(`${this.AI_SERVICE_URL}/chat`, {
         courseId,
         question
-      });
+      }, { timeout: 55000 });
       return response.data;
     } catch (error) {
       console.error('Error in AI chat service:', error);
