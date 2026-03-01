@@ -25,19 +25,15 @@ app.use(
       const isAllowed = allowedOrigins.some(allowed => {
         if (allowed === '*') return true;
         if (allowed === origin) return true;
-        // Support wildcard subdomains, e.g. https://*.vercel.app
+        // Support wildcard patterns, e.g. https://my-app-*.vercel.app
         if (allowed.includes('*')) {
-          const regex = new RegExp('^' + allowed.replace(/\*/g, '.*') + '$');
-          return regex.test(origin);
+          const escaped = allowed.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
+          return new RegExp('^' + escaped + '$').test(origin);
         }
         return false;
       });
 
-      if (isAllowed) {
-        callback(null, true);
-      } else {
-        callback(new Error(`Origin ${origin} not allowed by CORS`));
-      }
+      callback(null, isAllowed);
     },
     credentials: true,
   })
