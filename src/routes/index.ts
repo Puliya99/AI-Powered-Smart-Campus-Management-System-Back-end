@@ -24,6 +24,7 @@ import feedbackRoutes from './feedback.routes';
 import enrollmentRoutes from './enrollment.routes';
 import notificationRoutes from './notification.routes';
 import aiRoutes from './ai.routes';
+import libraryRoutes from './library.routes';
 import kioskRoutes from './kiosk.routes';
 
 const router = Router();
@@ -55,6 +56,7 @@ router.use('/feedback', feedbackRoutes);
 router.use('/enrollments', enrollmentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/ai', aiRoutes);
+router.use('/library', libraryRoutes);
 
 // Default route
 router.get('/', (req, res) => {
