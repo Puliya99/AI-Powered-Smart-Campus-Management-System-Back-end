@@ -26,6 +26,7 @@ import notificationRoutes from './notification.routes';
 import aiRoutes from './ai.routes';
 import libraryRoutes from './library.routes';
 import kioskRoutes from './kiosk.routes';
+import faceRoutes from './face.routes';
 
 const router = Router();
 
@@ -57,6 +58,7 @@ router.use('/enrollments', enrollmentRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/ai', aiRoutes);
 router.use('/library', libraryRoutes);
+router.use('/face', faceRoutes);
 
 // Default route
 router.get('/', (req, res) => {
@@ -264,6 +266,11 @@ router.get('/', (req, res) => {
         predictExamRisk: 'POST /api/v1/ai/predict-exam-risk',
         trainModel: 'POST /api/v1/ai/train-model',
         getStudentFeatures: 'GET /api/v1/ai/student-features',
+      },
+      face: {
+        enroll: 'POST /api/v1/face/enroll',
+        verify: 'POST /api/v1/face/verify',
+        checkEnrollment: 'GET /api/v1/face/check/:studentId',
       }
     },
   });

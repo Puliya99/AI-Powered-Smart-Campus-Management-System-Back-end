@@ -10,6 +10,8 @@ import { Lecturer } from '../entities/Lecturer.entity';
 import { Student } from '../entities/Student.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
+import axios from 'axios';
+import { env } from '../config/env';
 import notificationService from '../services/notification.service';
 import { NotificationType } from '../enums/NotificationType.enum';
 
@@ -302,11 +304,11 @@ export class QuizController {
 
             let finalStatus: string | null = attempt ? attempt.status : null;
             if (attempt && (attempt.status === 'SUBMITTED' || attempt.status === 'TIMED_OUT')) {
-              const startTime = new Date(attempt.startTime).getTime();
-              const now = new Date().getTime();
-              const durationMs = quiz.durationMinutes * 60 * 1000;
-              // Use 10s grace period consistent with startAttempt
-              if (now < (startTime + durationMs + 10000)) {
+              const sessionStart = new Date(attempt.startTime).getTime();
+              const currentSessionSec = Math.max(0, Math.floor((Date.now() - sessionStart) / 1000));
+              const totalElapsed = (attempt.timeSpentSeconds || 0) + currentSessionSec;
+              const totalDurationSec = quiz.durationMinutes * 60;
+              if (totalElapsed < (totalDurationSec + 10)) {
                 finalStatus = 'IN_PROGRESS'; // Mask as IN_PROGRESS if time is not up
               }
             }
@@ -379,15 +381,15 @@ export class QuizController {
       });
 
       if (existingAttempt) {
-        // If it was cancelled by lecturer or student, and NOT restarted, check if it can be resumed
-        // Actually, if it's CANCELLED, we only allow resume if lecturer restarts it (which sets it back to IN_PROGRESS)
-        
-        const startTime = new Date(existingAttempt.startTime).getTime();
-        const now = new Date().getTime();
-        const durationMs = existingAttempt.quiz.durationMinutes * 60 * 1000;
-        
-        // Add a small grace period (e.g. 10 seconds) to ensure the client doesn't get blocked by minor network delays/drift
-        const isTimeUp = now >= (startTime + durationMs + 10000);
+        // Calculate total elapsed time: accumulated previous sessions + current session
+        const currentSessionStart = new Date(existingAttempt.startTime).getTime();
+        const now = Date.now();
+        const currentSessionSeconds = Math.max(0, Math.floor((now - currentSessionStart) / 1000));
+        const totalElapsedSeconds = (existingAttempt.timeSpentSeconds || 0) + currentSessionSeconds;
+        const totalDurationSeconds = existingAttempt.quiz.durationMinutes * 60;
+
+        // Add a small grace period (10 seconds)
+        const isTimeUp = totalElapsedSeconds >= (totalDurationSeconds + 10);
 
         if (existingAttempt.status === 'IN_PROGRESS' || existingAttempt.status === 'TIMED_OUT' || (!isTimeUp && existingAttempt.status === 'SUBMITTED')) {
           // Allow resume if in progress, timed out (but still has time), or if time is not up even if submitted
@@ -397,7 +399,7 @@ export class QuizController {
           }
           return res.json({ status: 'success', data: { attempt: existingAttempt } });
         }
-        
+
         // If it was cancelled or timed out or time is up, don't allow re-entry
         let errorMessage = 'You have already attempted this quiz';
         if (existingAttempt.status === 'CANCELLED') errorMessage = 'This attempt was cancelled due to a security violation';
@@ -441,17 +443,43 @@ export class QuizController {
         return res.status(403).json({ status: 'error', message: 'Unauthorized to restart this attempt' });
       }
 
-      // Delete existing answers
-      if (attempt.answers && attempt.answers.length > 0) {
-        await this.answerRepository.remove(attempt.answers);
+      // Keep existing answers so the student resumes from where they left off
+      // (do NOT delete answers)
+
+      // Delete existing violations so the violation score starts fresh
+      const existingViolations = await this.violationRepository.find({
+        where: { attempt: { id: attempt.id } },
+      });
+      if (existingViolations.length > 0) {
+        await this.violationRepository.remove(existingViolations);
       }
 
-      // Reset attempt details
+      // Clear the AI module's temporal violation buffer for this attempt
+      const aiServiceUrl = env.AI_SERVICE_URL || 'http://localhost:8000';
+      try {
+        await axios.post(`${aiServiceUrl}/api/proctor/cleanup-buffer`, {
+          attempt_id: attempt.id,
+        }, { timeout: 5000 });
+      } catch {
+        // Non-critical — AI module may be down, continue anyway
+      }
+
+      // Calculate how much time was already spent before cancellation
+      // and save it so the remaining time continues from where it was paused
+      const prevStart = new Date(attempt.startTime).getTime();
+      const cancelledAt = attempt.submittedTime
+        ? new Date(attempt.submittedTime).getTime()
+        : Date.now();
+      const sessionSeconds = Math.max(0, Math.floor((cancelledAt - prevStart) / 1000));
+      const totalSpent = (attempt.timeSpentSeconds || 0) + sessionSeconds;
+
+      // Reset attempt for the new session
       attempt.status = 'IN_PROGRESS';
-      attempt.startTime = new Date(); // Reset start time to give full duration
+      attempt.startTime = new Date(); // New session starts now
       attempt.submittedTime = (null as any);
       attempt.score = 0;
       attempt.reason = (null as any);
+      attempt.timeSpentSeconds = totalSpent; // Accumulated time from previous sessions
 
       await this.attemptRepository.save(attempt);
 
@@ -506,6 +534,12 @@ export class QuizController {
 
       await this.answerRepository.save(answerEntities);
 
+      // Accumulate time spent in this session
+      const sessionStart = new Date(attempt.startTime).getTime();
+      const sessionEnd = Date.now();
+      const sessionSeconds = Math.max(0, Math.floor((sessionEnd - sessionStart) / 1000));
+      attempt.timeSpentSeconds = (attempt.timeSpentSeconds || 0) + sessionSeconds;
+
       attempt.score = score;
       attempt.submittedTime = new Date();
       attempt.status = 'SUBMITTED';
@@ -535,10 +569,11 @@ export class QuizController {
 
       // If student is fetching, check if time is up
       if (role === Role.STUDENT) {
-        const startTime = new Date(attempt.startTime).getTime();
-        const now = new Date().getTime();
-        const durationMs = attempt.quiz.durationMinutes * 60 * 1000;
-        const isTimeUp = now >= (startTime + durationMs + 10000); // 10s grace period
+        const sessionStart = new Date(attempt.startTime).getTime();
+        const currentSessionSeconds = Math.max(0, Math.floor((Date.now() - sessionStart) / 1000));
+        const totalElapsed = (attempt.timeSpentSeconds || 0) + currentSessionSeconds;
+        const totalDurationSeconds = attempt.quiz.durationMinutes * 60;
+        const isTimeUp = totalElapsed >= (totalDurationSeconds + 10); // 10s grace period
 
         // Hide results if time is not up AND it wasn't cancelled
         if (!isTimeUp && attempt.status !== 'CANCELLED') {
@@ -616,6 +651,8 @@ export class QuizController {
         'CHEATING_OBJECT': 3,
         'LOOKING_AWAY': 1,
         'HEAD_POSE': 1,
+        'SUSTAINED_NO_FACE': 2,
+        'SUSTAINED_GAZE_DEVIATION': 2,
       };
 
       // Type-specific warning messages
@@ -627,6 +664,8 @@ export class QuizController {
         'CHEATING_OBJECT': 'Suspicious object detected (phone, book, etc.)',
         'LOOKING_AWAY': 'Student looking away from screen',
         'HEAD_POSE': 'Suspicious head movement detected',
+        'SUSTAINED_NO_FACE': 'No face detected for extended period',
+        'SUSTAINED_GAZE_DEVIATION': 'Student looking away for extended period',
       };
 
       // Calculate total weighted violation score for this attempt
@@ -657,6 +696,11 @@ export class QuizController {
       );
 
       if (shouldCancel || criticalThreshold || repeatedCritical) {
+        // Save accumulated time before cancelling
+        const sessionStart = new Date(attempt.startTime).getTime();
+        const sessionSeconds = Math.max(0, Math.floor((Date.now() - sessionStart) / 1000));
+        attempt.timeSpentSeconds = (attempt.timeSpentSeconds || 0) + sessionSeconds;
+
         attempt.status = 'CANCELLED';
         attempt.reason = details || `Security violations exceeded threshold (Score: ${totalScore}, Type: ${violationType})`;
         attempt.submittedTime = new Date();
