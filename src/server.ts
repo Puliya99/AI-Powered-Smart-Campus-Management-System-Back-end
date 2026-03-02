@@ -5,6 +5,7 @@ import { logger } from './utils/logger';
 import { createServer } from 'http';
 import { setupSocketIO } from './config/socket';
 import schedulerService from './services/scheduler.service';
+import libraryReminderService from './services/libraryReminder.service';
 
 const PORT = process.env.PORT || 5000;
 
@@ -23,6 +24,9 @@ const startServer = async () => {
 
     // Start Scheduler for AI Predictions
     schedulerService.start();
+
+    // Start Library Reminder Service
+    libraryReminderService.start();
 
     // Start server
     const server = httpServer.listen(PORT, () => {
@@ -49,6 +53,7 @@ const startServer = async () => {
 
         // Stop Scheduler
         schedulerService.stop();
+        libraryReminderService.stop();
 
         try {
           // Close database connection
