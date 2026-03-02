@@ -29,6 +29,9 @@ export class QuizAttempt {
   @Column({ type: 'text', nullable: true })
   reason: string | null;
 
+  @Column({ type: 'int', default: 0 })
+  timeSpentSeconds: number;
+
   @OneToMany(() => QuizAnswer, answer => answer.attempt)
   answers: QuizAnswer[];
 }
