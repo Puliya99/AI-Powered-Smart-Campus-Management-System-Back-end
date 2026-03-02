@@ -10,7 +10,9 @@ import { Enrollment } from '../entities/Enrollment.entity';
 import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { ScheduleType } from '../enums/ScheduleType.enum';
-import { Between, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { ScheduleCategory } from '../enums/ScheduleCategory.enum';
+import { Between, In, LessThanOrEqual, MoreThanOrEqual } from 'typeorm';
+import { User } from '../entities/User.entity';
 
 import { Role } from '../enums/Role.enum';
 import notificationService from '../services/notification.service';
@@ -36,6 +38,7 @@ export class ScheduleController {
         lecturerId = '',
         centerId = '',
         status = '',
+        category = '',
         startDate = '',
         endDate = '',
         sortBy = 'date',
@@ -74,7 +77,7 @@ export class ScheduleController {
       // Search filter
       if (search) {
         queryBuilder.where(
-          '(module.moduleName ILIKE :search OR batch.batchNumber ILIKE :search OR schedule.lectureHall ILIKE :search)',
+          '(module.moduleName ILIKE :search OR batch.batchNumber ILIKE :search OR schedule.lectureHall ILIKE :search OR schedule.title ILIKE :search)',
           { search: `%${search}%` }
         );
       }
@@ -102,6 +105,11 @@ export class ScheduleController {
       // Status filter
       if (status) {
         queryBuilder.andWhere('schedule.status = :status', { status });
+      }
+
+      // Category filter
+      if (category) {
+        queryBuilder.andWhere('schedule.category = :category', { category });
       }
 
       // Date range filter
@@ -220,62 +228,72 @@ export class ScheduleController {
         lectureHall,
         status,
         type,
+        category,
+        title,
+        description,
       } = req.body;
 
-      // Verify module exists
-      const module = await this.moduleRepository.findOne({
-        where: { id: moduleId },
-      });
+      const scheduleCategory = category || ScheduleCategory.CLASS;
+      const isEvent = scheduleCategory !== ScheduleCategory.CLASS;
 
-      if (!module) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Module not found',
-        });
+      // For class schedules, module/batch/lecturer are required
+      if (!isEvent) {
+        if (!moduleId) {
+          return res.status(400).json({ status: 'error', message: 'Module is required for class schedules' });
+        }
+        if (!batchId) {
+          return res.status(400).json({ status: 'error', message: 'Batch is required for class schedules' });
+        }
+        if (!lecturerId) {
+          return res.status(400).json({ status: 'error', message: 'Lecturer is required for class schedules' });
+        }
       }
 
-      // Verify batch exists
-      const batch = await this.batchRepository.findOne({
-        where: { id: batchId },
-      });
-
-      if (!batch) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Batch not found',
-        });
+      // For event schedules, title is required
+      if (isEvent && !title) {
+        return res.status(400).json({ status: 'error', message: 'Title is required for event schedules' });
       }
 
-      // Verify lecturer exists
-      const lecturer = await this.lecturerRepository.findOne({
-        where: { id: lecturerId },
-      });
-
-      if (!lecturer) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Lecturer not found',
-        });
+      // Center is always required
+      if (!centerId) {
+        return res.status(400).json({ status: 'error', message: 'Center is required' });
       }
 
       // Verify center exists
-      const center = await this.centerRepository.findOne({
-        where: { id: centerId },
-      });
-
+      const center = await this.centerRepository.findOne({ where: { id: centerId } });
       if (!center) {
-        return res.status(404).json({
-          status: 'error',
-          message: 'Center not found',
-        });
+        return res.status(404).json({ status: 'error', message: 'Center not found' });
       }
 
       // Validate time
       if (startTime >= endTime) {
-        return res.status(400).json({
-          status: 'error',
-          message: 'End time must be after start time',
-        });
+        return res.status(400).json({ status: 'error', message: 'End time must be after start time' });
+      }
+
+      // Resolve optional relations
+      let module: Module | null = null;
+      let batch: Batch | null = null;
+      let lecturer: Lecturer | null = null;
+
+      if (moduleId) {
+        module = await this.moduleRepository.findOne({ where: { id: moduleId } });
+        if (!module) {
+          return res.status(404).json({ status: 'error', message: 'Module not found' });
+        }
+      }
+
+      if (batchId) {
+        batch = await this.batchRepository.findOne({ where: { id: batchId } });
+        if (!batch) {
+          return res.status(404).json({ status: 'error', message: 'Batch not found' });
+        }
+      }
+
+      if (lecturerId) {
+        lecturer = await this.lecturerRepository.findOne({ where: { id: lecturerId }, relations: ['user'] });
+        if (!lecturer) {
+          return res.status(404).json({ status: 'error', message: 'Lecturer not found' });
+        }
       }
 
       // Check for conflicts
@@ -283,7 +301,7 @@ export class ScheduleController {
         date,
         startTime,
         endTime,
-        lecturerId,
+        lecturerId || null,
         lectureHall,
         centerId
       );
@@ -298,6 +316,9 @@ export class ScheduleController {
 
       // Create schedule
       const schedule = this.scheduleRepository.create({
+        category: scheduleCategory,
+        title: title || null,
+        description: description || null,
         date: new Date(date),
         startTime,
         endTime,
@@ -306,49 +327,75 @@ export class ScheduleController {
         type: type || ScheduleType.PHYSICAL,
       });
 
-      schedule.module = module;
-      schedule.batch = batch;
-      schedule.lecturer = lecturer;
+      if (module) schedule.module = module;
+      if (batch) schedule.batch = batch;
+      if (lecturer) schedule.lecturer = lecturer;
       schedule.center = center;
 
       await this.scheduleRepository.save(schedule);
 
-      // Notify students and lecturer
+      // Send notifications
       try {
-        // Find all students in this batch
-        const enrollments = await AppDataSource.getRepository(Enrollment).find({
-          where: { batch: { id: batch.id }, status: EnrollmentStatus.ACTIVE },
-          relations: ['student', 'student.user']
-        });
-
-        const studentUserIds = enrollments.map(e => e.student.user.id);
-        const lecturerUserId = lecturer.user.id;
-
         const dateStr = new Date(date).toLocaleDateString();
-        const notificationTitle = `New Schedule: ${module.moduleName}`;
-        const notificationMessage = `A new lecture has been scheduled for ${module.moduleName} on ${dateStr} at ${startTime}.`;
+        const scheduleName = isEvent ? title : module?.moduleName || 'Class';
+        const categoryLabel = this.getCategoryLabel(scheduleCategory);
+        const notificationTitle = isEvent
+          ? `New ${categoryLabel}: ${title}`
+          : `New Schedule: ${scheduleName}`;
+        const notificationMessage = isEvent
+          ? `A new ${categoryLabel.toLowerCase()} "${title}" has been scheduled on ${dateStr} at ${startTime}.${description ? ' ' + description : ''}`
+          : `A new lecture has been scheduled for ${scheduleName} on ${dateStr} at ${startTime}.`;
 
-        // Notify students
-        if (studentUserIds.length > 0) {
-          await notificationService.createNotifications({
-            userIds: studentUserIds,
-            title: notificationTitle,
-            message: notificationMessage,
-            type: NotificationType.GENERAL,
-            link: '/student/schedule',
-            sendEmail: true
+        if (batch) {
+          // Notify students in the batch
+          const enrollments = await AppDataSource.getRepository(Enrollment).find({
+            where: { batch: { id: batch.id }, status: EnrollmentStatus.ACTIVE },
+            relations: ['student', 'student.user']
           });
-        }
 
-        // Notify lecturer
-        await notificationService.createNotification({
-          userId: lecturerUserId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: NotificationType.GENERAL,
-          link: '/lecturer/schedule',
-          sendEmail: true
-        });
+          const studentUserIds = enrollments.map(e => e.student.user.id);
+
+          if (studentUserIds.length > 0) {
+            await notificationService.createNotifications({
+              userIds: studentUserIds,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              link: '/student/schedule',
+              sendEmail: true
+            });
+          }
+
+          // Notify lecturer if assigned
+          if (lecturer) {
+            await notificationService.createNotification({
+              userId: lecturer.user.id,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              link: '/lecturer/schedule',
+              sendEmail: true
+            });
+          }
+        } else {
+          // No batch specified — notify all students and lecturers only
+          const studentsAndLecturers = await AppDataSource.getRepository(User).find({
+            where: { role: In([Role.STUDENT, Role.LECTURER]) },
+            select: ['id']
+          });
+          const userIds = studentsAndLecturers.map(u => u.id);
+
+          if (userIds.length > 0) {
+            await notificationService.createNotifications({
+              userIds,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              link: '/student/schedule',
+              sendEmail: true
+            });
+          }
+        }
       } catch (notifyError) {
         console.error('Failed to send notifications for new schedule:', notifyError);
       }
@@ -387,11 +434,14 @@ export class ScheduleController {
         lectureHall,
         status,
         type,
+        category,
+        title,
+        description,
       } = req.body;
 
       const schedule = await this.scheduleRepository.findOne({
         where: { id },
-        relations: ['module', 'batch', 'lecturer', 'center'],
+        relations: ['module', 'batch', 'lecturer', 'lecturer.user', 'center'],
       });
 
       if (!schedule) {
@@ -408,6 +458,9 @@ export class ScheduleController {
       if (lectureHall) schedule.lectureHall = lectureHall;
       if (status) schedule.status = status;
       if (type) schedule.type = type;
+      if (category) schedule.category = category;
+      if (title !== undefined) schedule.title = title || null;
+      if (description !== undefined) schedule.description = description || null;
 
       // Validate time
       if (schedule.startTime >= schedule.endTime) {
@@ -422,7 +475,7 @@ export class ScheduleController {
         schedule.date.toISOString().split('T')[0],
         schedule.startTime,
         schedule.endTime,
-        lecturerId || schedule.lecturer.id,
+        lecturerId || schedule.lecturer?.id || null,
         lectureHall || schedule.lectureHall,
         centerId || schedule.center.id,
         id
@@ -438,53 +491,33 @@ export class ScheduleController {
 
       // Update relations if provided
       if (moduleId) {
-        const module = await this.moduleRepository.findOne({
-          where: { id: moduleId },
-        });
+        const module = await this.moduleRepository.findOne({ where: { id: moduleId } });
         if (!module) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Module not found',
-          });
+          return res.status(404).json({ status: 'error', message: 'Module not found' });
         }
         schedule.module = module;
       }
 
       if (batchId) {
-        const batch = await this.batchRepository.findOne({
-          where: { id: batchId },
-        });
+        const batch = await this.batchRepository.findOne({ where: { id: batchId } });
         if (!batch) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Batch not found',
-          });
+          return res.status(404).json({ status: 'error', message: 'Batch not found' });
         }
         schedule.batch = batch;
       }
 
       if (lecturerId) {
-        const lecturer = await this.lecturerRepository.findOne({
-          where: { id: lecturerId },
-        });
+        const lecturer = await this.lecturerRepository.findOne({ where: { id: lecturerId }, relations: ['user'] });
         if (!lecturer) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Lecturer not found',
-          });
+          return res.status(404).json({ status: 'error', message: 'Lecturer not found' });
         }
         schedule.lecturer = lecturer;
       }
 
       if (centerId) {
-        const center = await this.centerRepository.findOne({
-          where: { id: centerId },
-        });
+        const center = await this.centerRepository.findOne({ where: { id: centerId } });
         if (!center) {
-          return res.status(404).json({
-            status: 'error',
-            message: 'Center not found',
-          });
+          return res.status(404).json({ status: 'error', message: 'Center not found' });
         }
         schedule.center = center;
       }
@@ -497,42 +530,68 @@ export class ScheduleController {
         relations: ['module', 'batch', 'lecturer', 'lecturer.user', 'center'],
       });
 
-      // Notify students and lecturer about schedule update
+      // Send update notifications
       try {
         if (updatedSchedule) {
-          const enrollments = await AppDataSource.getRepository(Enrollment).find({
-            where: { batch: { id: updatedSchedule.batch.id }, status: EnrollmentStatus.ACTIVE },
-            relations: ['student', 'student.user']
-          });
-
-          const studentUserIds = enrollments.map(e => e.student.user.id);
-          const lecturerUserId = updatedSchedule.lecturer.user.id;
-
+          const isEvent = updatedSchedule.category !== ScheduleCategory.CLASS;
           const dateStr = updatedSchedule.date.toLocaleDateString();
-          const notificationTitle = `Schedule Updated: ${updatedSchedule.module.moduleName}`;
-          const notificationMessage = `The lecture for ${updatedSchedule.module.moduleName} on ${dateStr} has been updated. New time: ${updatedSchedule.startTime}.`;
+          const scheduleName = isEvent ? updatedSchedule.title : updatedSchedule.module?.moduleName || 'Class';
+          const categoryLabel = this.getCategoryLabel(updatedSchedule.category);
+          const notificationTitle = isEvent
+            ? `${categoryLabel} Updated: ${updatedSchedule.title}`
+            : `Schedule Updated: ${scheduleName}`;
+          const notificationMessage = isEvent
+            ? `The ${categoryLabel.toLowerCase()} "${updatedSchedule.title}" on ${dateStr} has been updated. Time: ${updatedSchedule.startTime}.`
+            : `The lecture for ${scheduleName} on ${dateStr} has been updated. New time: ${updatedSchedule.startTime}.`;
 
-          // Notify students
-          if (studentUserIds.length > 0) {
-            await notificationService.createNotifications({
-              userIds: studentUserIds,
-              title: notificationTitle,
-              message: notificationMessage,
-              type: NotificationType.GENERAL,
-              link: '/student/schedule',
-              sendEmail: true
+          if (updatedSchedule.batch) {
+            const enrollments = await AppDataSource.getRepository(Enrollment).find({
+              where: { batch: { id: updatedSchedule.batch.id }, status: EnrollmentStatus.ACTIVE },
+              relations: ['student', 'student.user']
             });
-          }
 
-          // Notify lecturer
-          await notificationService.createNotification({
-            userId: lecturerUserId,
-            title: notificationTitle,
-            message: notificationMessage,
-            type: NotificationType.GENERAL,
-            link: '/lecturer/schedule',
-            sendEmail: true
-          });
+            const studentUserIds = enrollments.map(e => e.student.user.id);
+
+            if (studentUserIds.length > 0) {
+              await notificationService.createNotifications({
+                userIds: studentUserIds,
+                title: notificationTitle,
+                message: notificationMessage,
+                type: NotificationType.SCHEDULE,
+                link: '/student/schedule',
+                sendEmail: true
+              });
+            }
+
+            if (updatedSchedule.lecturer) {
+              await notificationService.createNotification({
+                userId: updatedSchedule.lecturer.user.id,
+                title: notificationTitle,
+                message: notificationMessage,
+                type: NotificationType.SCHEDULE,
+                link: '/lecturer/schedule',
+                sendEmail: true
+              });
+            }
+          } else {
+            // No batch — notify all students and lecturers only
+            const studentsAndLecturers = await AppDataSource.getRepository(User).find({
+              where: { role: In([Role.STUDENT, Role.LECTURER]) },
+              select: ['id']
+            });
+            const userIds = studentsAndLecturers.map(u => u.id);
+
+            if (userIds.length > 0) {
+              await notificationService.createNotifications({
+                userIds,
+                title: notificationTitle,
+                message: notificationMessage,
+                type: NotificationType.SCHEDULE,
+                link: '/student/schedule',
+                sendEmail: true
+              });
+            }
+          }
         }
       } catch (notifyError) {
         console.error('Failed to send notifications for updated schedule:', notifyError);
@@ -558,7 +617,7 @@ export class ScheduleController {
 
       const schedule = await this.scheduleRepository.findOne({
         where: { id },
-        relations: ['attendances', 'module', 'batch', 'lecturer', 'lecturer.user'],
+        relations: ['attendances', 'module', 'batch', 'lecturer', 'lecturer.user', 'center'],
       });
 
       if (!schedule) {
@@ -576,39 +635,64 @@ export class ScheduleController {
         });
       }
 
-      // Notify students and lecturer about schedule deletion before removing it
+      // Notify before removing
       try {
-        const enrollments = await AppDataSource.getRepository(Enrollment).find({
-          where: { batch: { id: schedule.batch.id }, status: EnrollmentStatus.ACTIVE },
-          relations: ['student', 'student.user']
-        });
-
-        const studentUserIds = enrollments.map(e => e.student.user.id);
-        const lecturerUserId = schedule.lecturer.user.id;
-
+        const isEvent = schedule.category !== ScheduleCategory.CLASS;
         const dateStr = schedule.date.toLocaleDateString();
-        const notificationTitle = `Schedule Cancelled: ${schedule.module.moduleName}`;
-        const notificationMessage = `The lecture for ${schedule.module.moduleName} on ${dateStr} has been cancelled.`;
+        const scheduleName = isEvent ? schedule.title : schedule.module?.moduleName || 'Class';
+        const categoryLabel = this.getCategoryLabel(schedule.category);
+        const notificationTitle = isEvent
+          ? `${categoryLabel} Cancelled: ${schedule.title}`
+          : `Schedule Cancelled: ${scheduleName}`;
+        const notificationMessage = isEvent
+          ? `The ${categoryLabel.toLowerCase()} "${schedule.title}" on ${dateStr} has been cancelled.`
+          : `The lecture for ${scheduleName} on ${dateStr} has been cancelled.`;
 
-        // Notify students
-        if (studentUserIds.length > 0) {
-          await notificationService.createNotifications({
-            userIds: studentUserIds,
-            title: notificationTitle,
-            message: notificationMessage,
-            type: NotificationType.GENERAL,
-            sendEmail: true
+        if (schedule.batch) {
+          const enrollments = await AppDataSource.getRepository(Enrollment).find({
+            where: { batch: { id: schedule.batch.id }, status: EnrollmentStatus.ACTIVE },
+            relations: ['student', 'student.user']
           });
-        }
 
-        // Notify lecturer
-        await notificationService.createNotification({
-          userId: lecturerUserId,
-          title: notificationTitle,
-          message: notificationMessage,
-          type: NotificationType.GENERAL,
-          sendEmail: true
-        });
+          const studentUserIds = enrollments.map(e => e.student.user.id);
+
+          if (studentUserIds.length > 0) {
+            await notificationService.createNotifications({
+              userIds: studentUserIds,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              sendEmail: true
+            });
+          }
+
+          if (schedule.lecturer) {
+            await notificationService.createNotification({
+              userId: schedule.lecturer.user.id,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              sendEmail: true
+            });
+          }
+        } else {
+          // No batch — notify all students and lecturers only
+          const studentsAndLecturers = await AppDataSource.getRepository(User).find({
+            where: { role: In([Role.STUDENT, Role.LECTURER]) },
+            select: ['id']
+          });
+          const userIds = studentsAndLecturers.map(u => u.id);
+
+          if (userIds.length > 0) {
+            await notificationService.createNotifications({
+              userIds,
+              title: notificationTitle,
+              message: notificationMessage,
+              type: NotificationType.SCHEDULE,
+              sendEmail: true
+            });
+          }
+        }
       } catch (notifyError) {
         console.error('Failed to send notifications for deleted schedule:', notifyError);
       }
@@ -690,6 +774,12 @@ export class ScheduleController {
         },
       });
 
+      // Event count
+      const eventCount = await this.scheduleRepository
+        .createQueryBuilder('schedule')
+        .where('schedule.category != :classCategory', { classCategory: ScheduleCategory.CLASS })
+        .getCount();
+
       res.json({
         status: 'success',
         data: {
@@ -699,6 +789,7 @@ export class ScheduleController {
           cancelledCount,
           todaySchedules,
           upcomingSchedules,
+          eventCount,
         },
       });
     } catch (error: any) {
@@ -714,7 +805,7 @@ export class ScheduleController {
     date: string,
     startTime: string,
     endTime: string,
-    lecturerId: string,
+    lecturerId: string | null,
     lectureHall: string,
     centerId: string,
     excludeScheduleId?: string
@@ -725,6 +816,7 @@ export class ScheduleController {
       .createQueryBuilder('schedule')
       .leftJoinAndSelect('schedule.lecturer', 'lecturer')
       .leftJoinAndSelect('lecturer.user', 'lecturerUser')
+      .leftJoinAndSelect('schedule.center', 'center')
       .where('schedule.date = :date', { date })
       .andWhere('schedule.status != :cancelled', { cancelled: ScheduleStatus.CANCELLED });
 
@@ -743,8 +835,8 @@ export class ScheduleController {
 
       if (!hasTimeConflict) continue;
 
-      // Lecturer conflict
-      if (existing.lecturer.id === lecturerId) {
+      // Lecturer conflict (only if both have a lecturer)
+      if (lecturerId && existing.lecturer && existing.lecturer.id === lecturerId) {
         conflicts.push({
           type: 'LECTURER',
           message: `Lecturer ${existing.lecturer.user.firstName} ${existing.lecturer.user.lastName} is already scheduled at this time`,
@@ -757,14 +849,14 @@ export class ScheduleController {
       }
 
       // Lecture hall conflict
-      if (existing.lectureHall === lectureHall && existing.center.id === centerId) {
+      if (existing.lectureHall === lectureHall && existing.center?.id === centerId) {
         conflicts.push({
           type: 'HALL',
           message: `Lecture hall ${lectureHall} is already booked at this time`,
           schedule: {
             id: existing.id,
             time: `${existing.startTime} - ${existing.endTime}`,
-            lecturer: `${existing.lecturer.user.firstName} ${existing.lecturer.user.lastName}`,
+            lecturer: existing.lecturer ? `${existing.lecturer.user.firstName} ${existing.lecturer.user.lastName}` : 'N/A',
           },
         });
       }
@@ -845,8 +937,6 @@ export class ScheduleController {
       const currentDate = now.toISOString().split('T')[0];
       const currentTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:mm
 
-      // Find all scheduled sessions that have already ended
-      // They are either from previous days OR today but with endTime < current time
       const finishedSchedules = await this.scheduleRepository
         .createQueryBuilder('schedule')
         .where('schedule.status = :status', { status: ScheduleStatus.SCHEDULED })
@@ -864,8 +954,21 @@ export class ScheduleController {
       }
     } catch (error) {
       console.error('Error in autoCompleteFinishedSchedules:', error);
-      // We don't throw here to avoid breaking the main request flow
     }
+  }
+
+  // Helper to get human-readable category label
+  private getCategoryLabel(category: ScheduleCategory): string {
+    const labels: Record<ScheduleCategory, string> = {
+      [ScheduleCategory.CLASS]: 'Class',
+      [ScheduleCategory.SEMINAR]: 'Seminar',
+      [ScheduleCategory.WORKSHOP]: 'Workshop',
+      [ScheduleCategory.EXAM]: 'Exam',
+      [ScheduleCategory.SPORTS_DAY]: 'Sports Day',
+      [ScheduleCategory.GUEST_LECTURE]: 'Guest Lecture',
+      [ScheduleCategory.OTHER]: 'Event',
+    };
+    return labels[category] || 'Event';
   }
 }
 

@@ -1,5 +1,6 @@
 import { ScheduleStatus } from '../enums/ScheduleStatus.enum';
 import { ScheduleType } from '../enums/ScheduleType.enum';
+import { ScheduleCategory } from '../enums/ScheduleCategory.enum';
 import { Entity, PrimaryGeneratedColumn, ManyToOne, Column, OneToMany, CreateDateColumn, UpdateDateColumn } from "typeorm";
 import { Attendance } from "./Attendance.entity";
 import { Center } from "./Center.entity";
@@ -12,13 +13,22 @@ export class Schedule {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @ManyToOne(() => Module, module => module.schedules)
+  @Column({ type: 'enum', enum: ScheduleCategory, default: ScheduleCategory.CLASS })
+  category: ScheduleCategory;
+
+  @Column({ type: 'varchar', length: 200, nullable: true })
+  title: string;
+
+  @Column({ type: 'text', nullable: true })
+  description: string;
+
+  @ManyToOne(() => Module, module => module.schedules, { nullable: true })
   module: Module;
 
-  @ManyToOne(() => Batch, batch => batch.schedules)
+  @ManyToOne(() => Batch, batch => batch.schedules, { nullable: true })
   batch: Batch;
 
-  @ManyToOne(() => Lecturer, lecturer => lecturer.schedules)
+  @ManyToOne(() => Lecturer, lecturer => lecturer.schedules, { nullable: true })
   lecturer: Lecturer;
 
   @ManyToOne(() => Center, center => center.schedules)

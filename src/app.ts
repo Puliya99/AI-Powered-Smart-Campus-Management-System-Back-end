@@ -17,7 +17,24 @@ const app: Application = express();
 app.use(helmet());
 app.use(
   cors({
-    origin: env.CORS_ORIGIN,
+    origin: (origin, callback) => {
+      // Allow requests with no origin (mobile apps, curl, etc.)
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = env.CORS_ORIGIN.split(',').map(o => o.trim());
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (allowed === '*') return true;
+        if (allowed === origin) return true;
+        // Support wildcard patterns, e.g. https://my-app-*.vercel.app
+        if (allowed.includes('*')) {
+          const escaped = allowed.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\\\*/g, '.*');
+          return new RegExp('^' + escaped + '$').test(origin);
+        }
+        return false;
+      });
+
+      callback(null, isAllowed);
+    },
     credentials: true,
   })
 );

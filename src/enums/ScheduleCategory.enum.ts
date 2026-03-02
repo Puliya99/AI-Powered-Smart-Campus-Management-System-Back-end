@@ -1,0 +1,9 @@
+export enum ScheduleCategory {
+  CLASS = 'CLASS',
+  SEMINAR = 'SEMINAR',
+  WORKSHOP = 'WORKSHOP',
+  EXAM = 'EXAM',
+  SPORTS_DAY = 'SPORTS_DAY',
+  GUEST_LECTURE = 'GUEST_LECTURE',
+  OTHER = 'OTHER',
+}

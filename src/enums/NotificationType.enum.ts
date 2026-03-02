@@ -6,4 +6,6 @@ export enum NotificationType {
   RESULT = 'RESULT',
   GENERAL = 'GENERAL',
   AI_ALERT = 'AI_ALERT',
+  SCHEDULE = 'SCHEDULE',
+  LIBRARY = 'LIBRARY',
 }
