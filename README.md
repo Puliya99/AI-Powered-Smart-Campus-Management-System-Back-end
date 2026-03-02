@@ -4,29 +4,28 @@
 
 The server-side API for the AI-Powered Smart Campus Management System. Provides secure RESTful APIs for academic management, financial tracking, AI analytics, real-time communication, and online assessments with anti-cheating mechanisms.
 
-Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeORM**. Includes a companion **Python FastAPI** microservice for AI/ML features.
+Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeORM**.
 
 ---
 
 ## Core Features
 
 - **Multi-role Authentication** - JWT-based auth with Admin, Staff, Lecturer, and Student roles
-- **Academic Management** - Students, lecturers, programs, modules, batches, enrollments
+- **Academic Management** - Students, lecturers, programs, modules, batches, enrollments, centers
 - **Operational Tracking** - Attendance, payments, assignments, results, schedules
 - **Online Quiz System** - Time-limited assessments with auto-grading and violation tracking
-- **AI Analytics** - Student performance risk prediction via ML (RandomForest)
+- **AI Analytics** - Student performance risk prediction via ML (proxied to Python AI module)
 - **RAG Chatbot** - Lecture material Q&A using Gemini LLM + FAISS vector search
 - **AI Proctoring** - YOLOv8m object detection + MediaPipe head pose estimation
 - **Real-time Communication** - Socket.IO for notifications and WebRTC signaling
 - **Video Meetings** - WebRTC-based online classes with participant tracking
 - **WebAuthn/Passkey** - Biometric attendance via kiosk terminals
 - **Email Integration** - SMTP emails for account creation, password resets
+- **Library System** - Book management with borrowing tracking
 
 ---
 
 ## Technology Stack
-
-### Node.js API
 
 | Category | Technology |
 |---|---|
@@ -43,19 +42,7 @@ Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeO
 | Security | Helmet 7.2, express-rate-limit 7.5, CORS |
 | Validation | class-validator 0.14, class-transformer 0.5 |
 | Compression | compression 1.8 |
-| Testing | Jest, Supertest, ts-jest |
-
-### AI Module (Python)
-
-| Category | Technology |
-|---|---|
-| Language | Python 3.9+ |
-| Framework | FastAPI |
-| ML | Scikit-learn (RandomForestClassifier), Pandas, NumPy |
-| Embeddings | Sentence-Transformers (all-MiniLM-L6-v2) |
-| Vector Search | FAISS |
-| LLM | Google Gemini (via google-genai SDK) |
-| Proctoring | YOLOv8m (ultralytics), MediaPipe, OpenCV |
+| Testing | Jest 29.7, Supertest 6.3, ts-jest |
 
 ---
 
@@ -64,7 +51,6 @@ Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeO
 - **Node.js** v18+ (v20+ recommended)
 - **npm** v9+
 - **PostgreSQL** v14+
-- **Python** 3.9+ (for AI module)
 
 ---
 
@@ -88,17 +74,7 @@ Update the values as needed (see [Environment Variables](#environment-variables)
 
 Ensure PostgreSQL is running. The server will auto-create the database specified in `DB_NAME` if it does not exist. TypeORM `synchronize: true` auto-syncs the schema from entities on startup.
 
-### 4. Start the AI Module (optional, required for AI features)
-
-```bash
-cd ai-module
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
-
-### 5. Run the Server
+### 4. Run the Server
 
 **Development (with hot-reload):**
 
@@ -113,6 +89,8 @@ npm run build
 npm start
 ```
 
+The server starts on port `5000` by default.
+
 ---
 
 ## Available Scripts
@@ -122,8 +100,9 @@ npm start
 | `npm run dev` | Start dev server with `ts-node-dev` (hot-reload) |
 | `npm run build` | Compile TypeScript to `dist/` |
 | `npm start` | Run compiled server from `dist/server.js` |
-| `npm run test` | Run tests with Jest |
+| `npm test` | Run tests with Jest |
 | `npm run typeorm` | TypeORM CLI wrapper |
+| `npm run test-predict` | Run AI prediction test script |
 
 ---
 
@@ -176,28 +155,28 @@ Back-end/
 │   │   ├── database.ts      # TypeORM DataSource (PostgreSQL, auto-create DB)
 │   │   ├── env.ts           # Type-safe environment variable loader
 │   │   └── socket.ts        # Socket.IO for WebRTC signaling + notifications
-│   ├── controllers/         # 29 request handler modules
+│   ├── controllers/         # 27 request handler modules
 │   ├── routes/
 │   │   ├── index.ts         # Master router, mounts all sub-routers at /api/v1
-│   │   └── *.routes.ts      # 27 route definition files
+│   │   └── *.routes.ts      # 28 route definition files
 │   ├── services/
 │   │   ├── ai.service.ts    # Proxy to Python AI module
 │   │   ├── auth.service.ts  # Register, login, JWT, password management
 │   │   ├── email.service.ts # SMTP emails via Nodemailer
 │   │   ├── scheduler.service.ts  # Weekly batch AI prediction runner
 │   │   └── ...              # attendance, dashboard, notification, user, etc.
-│   ├── entities/            # 21 TypeORM entities (PostgreSQL tables)
-│   │   ├── User.entity.ts, Student.entity.ts, Lecturer.entity.ts
-│   │   ├── Program.entity.ts, Module.entity.ts, Batch.entity.ts, Center.entity.ts
-│   │   ├── Enrollment.entity.ts, Schedule.entity.ts, Attendance.entity.ts
-│   │   ├── LectureNote.entity.ts, MaterialChunk.entity.ts
-│   │   ├── Quiz.entity.ts, QuizQuestion.entity.ts, QuizAnswer.entity.ts,
-│   │   │   QuizAttempt.entity.ts, QuizViolation.entity.ts
-│   │   ├── Assignment.entity.ts, Submission.entity.ts, Result.entity.ts
-│   │   ├── Payment.entity.ts, Prediction.entity.ts, Feedback.entity.ts
-│   │   ├── Notification.entity.ts, Setting.entity.ts
-│   │   ├── VideoMeeting.entity.ts, MeetingParticipant.entity.ts
-│   │   └── WebAuthnCredential.entity.ts
+│   ├── entities/            # 31 TypeORM entities (PostgreSQL tables)
+│   │   ├── User, Student, Lecturer, Admin
+│   │   ├── Program, Module, Batch, Center, Enrollment
+│   │   ├── Schedule, Attendance
+│   │   ├── LectureNote, MaterialChunk
+│   │   ├── Quiz, QuizQuestion, QuizAnswer, QuizAttempt, QuizViolation
+│   │   ├── Assignment, Submission, Result
+│   │   ├── Payment, Prediction, Feedback
+│   │   ├── Notification, Setting
+│   │   ├── VideoMeeting, MeetingParticipant
+│   │   ├── LibraryBook, Borrowing
+│   │   └── WebAuthnCredential
 │   ├── enums/               # Role, AttendanceStatus, BatchStatus, PaymentStatus, etc.
 │   ├── middleware/
 │   │   ├── auth.middleware.ts    # JWT verification + role-based authorization
@@ -211,9 +190,8 @@ Back-end/
 │   ├── validators/
 │   ├── repositories/
 │   ├── scripts/
-│   └── tests/
-├── ai-module/
-│   └── main.py              # Python FastAPI AI microservice
+│   │   └── test-prediction.ts
+│   └── tests/               # Jest test directory
 ├── uploads/                 # File upload storage
 ├── logs/                    # Winston log files (combined.log, error.log)
 ├── package.json
@@ -229,7 +207,7 @@ Applied in order:
 
 1. **Helmet** - Security headers
 2. **CORS** - Configurable origin via `CORS_ORIGIN`
-3. **Rate Limiting** - Auth endpoints: 20 req/15min; general API: 100 req/15min
+3. **Rate Limiting** - Auth endpoints: 20 req/15min; general API: configurable
 4. **Body Parser** - JSON and URL-encoded (10MB limit)
 5. **Compression** - Gzip responses
 6. **Morgan** - HTTP request logging
@@ -304,6 +282,7 @@ All endpoints are mounted under `/api/v1`.
 | `/settings` | System settings CRUD |
 | `/users` | User management CRUD + stats |
 | `/kiosk` | Public kiosk attendance (passkey/fingerprint) |
+| `/library` | Book management + borrowing |
 
 ---
 
@@ -314,47 +293,14 @@ All endpoints are mounted under `/api/v1`.
 - Connection pool: min 2, max 10
 - Auto-creates database if it doesn't exist
 - SSL support via `DB_SSL` env var
-- **21 entities** covering the full domain model
-
----
-
-## AI Module
-
-A standalone Python FastAPI microservice at `ai-module/main.py`.
-
-### Endpoints
-
-| Method | Endpoint | Description |
-|---|---|---|
-| POST | `/train` | Train RandomForest on historical student data |
-| POST | `/predict` | Predict exam failure risk (HIGH/MEDIUM/LOW) |
-| POST | `/process-material` | Upload PDF/DOCX/PPTX, extract text, embed, store in FAISS |
-| POST | `/chat` | RAG chatbot: embed query, retrieve chunks, answer via Gemini |
-| POST | `/api/proctor/detect-objects` | YOLOv8m object detection (phone, book, laptop) |
-| POST | `/api/proctor/head-pose` | MediaPipe head pose + eye closure detection |
-| POST | `/api/proctor/analyze` | Combined proctoring analysis |
-| GET | `/api/proctor/health` | Health check |
-
-### ML Features for Risk Prediction
-
-Attendance percentage, assignment scores, quiz averages, GPA, missed classes, late submissions, face violations, payment delay days, previous exam scores.
-
-### AI Module Setup
-
-```bash
-cd ai-module
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
+- **31 entities** covering the full domain model
 
 ---
 
 ## Architecture
 
 ```
-Browser (React SPA)
+Browser (React SPA, port 3000)
     |
     |-- HTTP (Bearer JWT) --> Express API (port 5000)
     |-- Socket.IO ----------> Express API (WebRTC signaling + notifications)
@@ -375,6 +321,8 @@ Express API
 - **Framework:** Jest + Supertest + ts-jest
 - **Run:** `npm test`
 - **Directory:** `src/tests/`
+
+<!-- TODO: Add test files and improve coverage -->
 
 ---
 
