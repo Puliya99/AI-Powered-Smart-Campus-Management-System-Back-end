@@ -10,6 +10,9 @@ import { Student } from '../entities/Student.entity';
 import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
 import { io } from '../config/socket';
+import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class VideoMeetingController {
 
@@ -83,6 +86,28 @@ export class VideoMeetingController {
         where: { id: meeting.id },
         relations: ['module', 'lecturer', 'lecturer.user', 'batch'],
       });
+
+      // Notify students in the batch that an online class has started
+      try {
+        const enrollments = await this.enrollmentRepository.find({
+          where: { batch: { id: batch.id }, status: EnrollmentStatus.ACTIVE },
+          relations: ['student', 'student.user'],
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: `Online Class Started: ${module.moduleName}`,
+            message: `Your online class "${title}" for ${module.moduleName} has started. Join now using code: ${meetingCode}.`,
+            type: NotificationType.SCHEDULE,
+            link: '/student/online-classes',
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify students about online class:', notifyError);
+      }
 
       res.status(201).json({
         status: 'success',
