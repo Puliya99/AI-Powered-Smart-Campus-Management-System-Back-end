@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import programController from '../controllers/program.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -9,10 +10,10 @@ const router = Router();
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
 // Get all programs (All authenticated users can view)
-router.get('/', programController.getAllPrograms.bind(programController));
+router.get('/', applyCenterFilter, programController.getAllPrograms.bind(programController));
 
 // Get programs dropdown (for forms)
-router.get('/dropdown', programController.getProgramsDropdown.bind(programController));
+router.get('/dropdown', applyCenterFilter, programController.getProgramsDropdown.bind(programController));
 
 // Get program statistics (Admin and Staff)
 router.get(
