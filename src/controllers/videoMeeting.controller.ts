@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
+import { IsNull } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { VideoMeeting } from '../entities/VideoMeeting.entity';
 import { MeetingParticipant } from '../entities/MeetingParticipant.entity';
@@ -367,17 +368,17 @@ export class VideoMeetingController {
         }
       }
 
-      // Check if already in meeting
+      // Check if already active in the meeting (leftAt IS NULL = currently present)
       let participant = await this.participantRepository.findOne({
-        where: { meeting: { id }, user: { id: userId }, leftAt: undefined },
+        where: { meeting: { id }, user: { id: userId }, leftAt: IsNull() },
       });
 
       if (!participant) {
+        // First join OR rejoin after leaving — create a fresh session record
         participant = this.participantRepository.create({
           meeting,
           user: { id: userId } as any,
           role: meeting.lecturer.user.id === userId ? 'HOST' : 'PARTICIPANT',
-          joinedAt: new Date(),
         });
         await this.participantRepository.save(participant);
       }
@@ -451,9 +452,10 @@ export class VideoMeetingController {
       const { id } = req.params;
       const userId = (req as any).user.userId;
 
+      // Find the current active session (leftAt IS NULL)
       const participant = await this.participantRepository.findOne({
-        where: { meeting: { id }, user: { id: userId }, leftAt: undefined },
-        order: { joinedAt: 'DESC' }
+        where: { meeting: { id }, user: { id: userId }, leftAt: IsNull() },
+        order: { joinedAt: 'DESC' },
       });
 
       if (participant) {
@@ -470,6 +472,81 @@ export class VideoMeetingController {
         status: 'error',
         message: error.message || 'Failed to leave meeting',
       });
+    }
+  }
+
+  // Get online attendance for a meeting (all participant sessions grouped by user)
+  async getMeetingAttendance(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      const meeting = await this.meetingRepository.findOne({
+        where: { id },
+        relations: ['module', 'batch'],
+      });
+      if (!meeting) {
+        return res.status(404).json({ status: 'error', message: 'Meeting not found' });
+      }
+
+      // Get all participant sessions (including multiple rejoin sessions per user)
+      const sessions = await this.participantRepository.find({
+        where: { meeting: { id } },
+        relations: ['user'],
+        order: { joinedAt: 'ASC' },
+      });
+
+      // Group sessions by userId
+      const grouped = new Map<string, {
+        userId: string;
+        userName: string;
+        role: string;
+        sessions: { joinedAt: Date; leftAt: Date | null }[];
+        firstJoinedAt: Date;
+        lastLeftAt: Date | null;
+        currentlyPresent: boolean;
+      }>();
+
+      for (const s of sessions) {
+        const uid = s.user.id;
+        if (!grouped.has(uid)) {
+          grouped.set(uid, {
+            userId:           uid,
+            userName:         `${s.user.firstName} ${s.user.lastName}`,
+            role:             s.role,
+            sessions:         [],
+            firstJoinedAt:    s.joinedAt,
+            lastLeftAt:       null,
+            currentlyPresent: false,
+          });
+        }
+        const entry = grouped.get(uid)!;
+        entry.sessions.push({ joinedAt: s.joinedAt, leftAt: s.leftAt ?? null });
+        if (!s.leftAt) entry.currentlyPresent = true;
+        if (s.leftAt && (!entry.lastLeftAt || s.leftAt > entry.lastLeftAt)) {
+          entry.lastLeftAt = s.leftAt;
+        }
+      }
+
+      const attendees = Array.from(grouped.values());
+
+      res.json({
+        status:  'success',
+        data: {
+          meeting: {
+            id:          meeting.id,
+            title:       meeting.title,
+            startTime:   meeting.startTime,
+            endTime:     meeting.endTime,
+            isActive:    meeting.isActive,
+            module:      meeting.module,
+            batch:       meeting.batch,
+          },
+          totalAttendees: attendees.filter(a => a.role === 'PARTICIPANT').length,
+          attendees,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch attendance' });
     }
   }
 
