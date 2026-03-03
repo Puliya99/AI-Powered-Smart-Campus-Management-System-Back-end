@@ -5,6 +5,9 @@ import { VideoMeeting } from '../entities/VideoMeeting.entity';
 import { MeetingParticipant } from '../entities/MeetingParticipant.entity';
 import { Module } from '../entities/Module.entity';
 import { Lecturer } from '../entities/Lecturer.entity';
+import { Batch } from '../entities/Batch.entity';
+import { Student } from '../entities/Student.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
 import { Role } from '../enums/Role.enum';
 import { io } from '../config/socket';
 
@@ -14,11 +17,14 @@ export class VideoMeetingController {
   private participantRepository = AppDataSource.getRepository(MeetingParticipant);
   private moduleRepository = AppDataSource.getRepository(Module);
   private lecturerRepository = AppDataSource.getRepository(Lecturer);
+  private batchRepository = AppDataSource.getRepository(Batch);
+  private studentRepository = AppDataSource.getRepository(Student);
+  private enrollmentRepository = AppDataSource.getRepository(Enrollment);
 
   // Create a new meeting (Lecturer only)
   async createMeeting(req: Request, res: Response) {
     try {
-      const { title, moduleId } = req.body;
+      const { title, moduleId, batchId } = req.body;
       const userId = (req as any).user.userId;
 
       const lecturer = await this.lecturerRepository.findOne({
@@ -43,12 +49,28 @@ export class VideoMeetingController {
         });
       }
 
+      if (!batchId) {
+        return res.status(400).json({
+          status: 'error',
+          message: 'Batch is required',
+        });
+      }
+
+      const batch = await this.batchRepository.findOne({ where: { id: batchId } });
+      if (!batch) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Batch not found',
+        });
+      }
+
       const meetingCode = uuidv4().substring(0, 8).toUpperCase();
 
       const meeting = this.meetingRepository.create({
         title,
         module,
         lecturer,
+        batch,
         meetingCode,
         startTime: new Date(),
         isActive: true,
@@ -56,9 +78,15 @@ export class VideoMeetingController {
 
       await this.meetingRepository.save(meeting);
 
+      // Re-fetch with batch relation for full response
+      const saved = await this.meetingRepository.findOne({
+        where: { id: meeting.id },
+        relations: ['module', 'lecturer', 'lecturer.user', 'batch'],
+      });
+
       res.status(201).json({
         status: 'success',
-        data: { meeting },
+        data: { meeting: saved },
       });
     } catch (error: any) {
       res.status(500).json({
@@ -176,7 +204,7 @@ export class VideoMeetingController {
 
       const meetings = await this.meetingRepository.find({
         where: { lecturer: { user: { id: userId } }, isActive: true },
-        relations: ['module', 'lecturer', 'lecturer.user'],
+        relations: ['module', 'lecturer', 'lecturer.user', 'batch'],
         order: { startTime: 'DESC' },
       });
 
@@ -274,7 +302,7 @@ export class VideoMeetingController {
 
       const meeting = await this.meetingRepository.findOne({
         where: { id },
-        relations: ['lecturer', 'lecturer.user'],
+        relations: ['lecturer', 'lecturer.user', 'batch'],
       });
 
       if (!meeting) {
@@ -289,6 +317,29 @@ export class VideoMeetingController {
           status: 'error',
           message: 'Meeting has already ended',
         });
+      }
+
+      // If the meeting is for a specific batch, verify the student is enrolled in it
+      if (meeting.batch && role === Role.STUDENT) {
+        const student = await this.studentRepository.findOne({
+          where: { user: { id: userId } },
+        });
+
+        if (student) {
+          const enrollment = await this.enrollmentRepository.findOne({
+            where: {
+              student: { id: student.id },
+              batch: { id: meeting.batch.id },
+            },
+          });
+
+          if (!enrollment) {
+            return res.status(403).json({
+              status: 'error',
+              message: 'You are not enrolled in the batch for this lecture',
+            });
+          }
+        }
       }
 
       // Check if already in meeting
@@ -314,6 +365,57 @@ export class VideoMeetingController {
       res.status(500).json({
         status: 'error',
         message: error.message || 'Failed to join meeting',
+      });
+    }
+  }
+
+  // Get active meetings for the logged-in student (filtered by their enrolled batches)
+  async getStudentActiveMeetings(req: Request, res: Response) {
+    try {
+      const userId = (req as any).user.userId;
+
+      const student = await this.studentRepository.findOne({
+        where: { user: { id: userId } },
+      });
+
+      if (!student) {
+        return res.status(404).json({
+          status: 'error',
+          message: 'Student record not found',
+        });
+      }
+
+      // Get the student's active enrolled batch IDs
+      const enrollments = await this.enrollmentRepository.find({
+        where: { student: { id: student.id }, status: 'ACTIVE' as any },
+        relations: ['batch'],
+      });
+
+      const batchIds = enrollments.map(e => e.batch?.id).filter(Boolean);
+
+      if (batchIds.length === 0) {
+        return res.json({ status: 'success', data: { meetings: [] } });
+      }
+
+      const meetings = await this.meetingRepository
+        .createQueryBuilder('meeting')
+        .leftJoinAndSelect('meeting.module', 'module')
+        .leftJoinAndSelect('meeting.lecturer', 'lecturer')
+        .leftJoinAndSelect('lecturer.user', 'lecturerUser')
+        .leftJoinAndSelect('meeting.batch', 'batch')
+        .where('meeting.isActive = :isActive', { isActive: true })
+        .andWhere('batch.id IN (:...batchIds)', { batchIds })
+        .orderBy('meeting.startTime', 'DESC')
+        .getMany();
+
+      res.json({
+        status: 'success',
+        data: { meetings },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch active meetings',
       });
     }
   }
