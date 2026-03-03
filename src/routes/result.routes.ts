@@ -21,6 +21,19 @@ router.get(
   resultController.getGraduationReport.bind(resultController),
 );
 
+// ── Student risk report (Admin / USER) ───────────────────────────────────────
+router.get(
+  '/student-risk',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.getStudentRiskReport.bind(resultController),
+);
+
+router.post(
+  '/student-risk/notify',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.notifyRiskStudents.bind(resultController),
+);
+
 // ── Repeat exam enrollments ───────────────────────────────────────────────────
 router.get(
   '/repeats',
