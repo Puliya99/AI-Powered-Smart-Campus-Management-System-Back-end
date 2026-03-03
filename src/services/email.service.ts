@@ -603,8 +603,9 @@ export class EmailService {
   /**
    * Send a general notification email
    */
-  async sendNotificationEmail(email: string, title: string, message: string, link?: string) {
-    const fullLink = link ? `${process.env.FRONTEND_URL || 'http://localhost:3000'}${link}` : null;
+  async sendNotificationEmail(email: string, title: string, message: string, link?: string, firstName?: string) {
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const readUrl = link ? `${frontendUrl}${link}` : `${frontendUrl}/notifications`;
 
     const mailOptions = {
       from: {
@@ -612,9 +613,9 @@ export class EmailService {
         address: env.EMAIL_FROM || env.SMTP_USER!,
       },
       to: email,
-      subject: title,
-      html: this.getNotificationEmailTemplate(title, message, fullLink),
-      text: `${title}\n\n${message}${fullLink ? `\n\nView details: ${fullLink}` : ''}`,
+      subject: `New Notification: ${title}`,
+      html: this.getNotificationEmailTemplate(title, message, readUrl, firstName),
+      text: `Hello${firstName ? ` ${firstName}` : ''},\n\nYou have received a new notification on Smart Campus.\n\n${title}\n\n${message}\n\nPlease log in to read this notification:\n${readUrl}\n\n© ${new Date().getFullYear()} Smart Campus. This is an automated email, please do not reply.`,
     };
 
     try {
@@ -629,23 +630,44 @@ export class EmailService {
   /**
    * Notification Email Template
    */
-  private getNotificationEmailTemplate(title: string, message: string, link: string | null): string {
+  private getNotificationEmailTemplate(title: string, message: string, readUrl: string, firstName?: string): string {
     return `
       <!DOCTYPE html>
       <html>
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${title}</title>
+        <title>New Notification: ${title}</title>
         <style>
           body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
           .container { background-color: #f9f9f9; border-radius: 10px; padding: 30px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
           .header { text-align: center; margin-bottom: 30px; }
           .logo { font-size: 32px; font-weight: bold; color: #4F46E5; margin-bottom: 10px; }
           .content { background-color: white; padding: 30px; border-radius: 8px; }
-          h1 { color: #1F2937; margin-top: 0; font-size: 24px; }
-          .button { display: inline-block; background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold; margin-top: 20px; }
-          .footer { text-align: center; margin-top: 30px; color: #6B7280; font-size: 14px; }
+          h1 { color: #1F2937; margin-top: 0; font-size: 22px; }
+          .notification-box {
+            background-color: #EEF2FF;
+            border-left: 4px solid #4F46E5;
+            border-radius: 6px;
+            padding: 16px 20px;
+            margin: 20px 0;
+          }
+          .notification-title { font-weight: 700; color: #1F2937; font-size: 15px; margin-bottom: 6px; }
+          .notification-message { color: #374151; font-size: 14px; }
+          .button-container { text-align: center; margin-top: 28px; }
+          .button {
+            display: inline-block;
+            background: linear-gradient(135deg, #4F46E5, #7C3AED);
+            color: white !important;
+            padding: 14px 36px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-weight: 700;
+            font-size: 15px;
+            letter-spacing: 0.3px;
+          }
+          .footer { text-align: center; margin-top: 30px; color: #6B7280; font-size: 13px; }
+          .divider { border-top: 1px solid #E5E7EB; margin: 24px 0; }
         </style>
       </head>
       <body>
@@ -654,9 +676,24 @@ export class EmailService {
             <div class="logo">🎓 Smart Campus</div>
           </div>
           <div class="content">
-            <h1>${title}</h1>
-            <p>${message}</p>
-            ${link ? `<a href="${link}" class="button">View Details</a>` : ''}
+            <h1>You have a new notification</h1>
+            <p>Hello${firstName ? ` <strong>${firstName}</strong>` : ''},</p>
+            <p>You have received a new notification on Smart Campus. Please log in to read it.</p>
+
+            <div class="notification-box">
+              <div class="notification-title">${title}</div>
+              <div class="notification-message">${message}</div>
+            </div>
+
+            <div class="button-container">
+              <a href="${readUrl}" class="button">Read Notification</a>
+            </div>
+
+            <div class="divider"></div>
+            <p style="color:#6B7280; font-size:13px;">
+              If the button doesn't work, copy and paste this link into your browser:<br>
+              <a href="${readUrl}" style="color:#4F46E5; word-break:break-all;">${readUrl}</a>
+            </p>
           </div>
           <div class="footer">
             <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>

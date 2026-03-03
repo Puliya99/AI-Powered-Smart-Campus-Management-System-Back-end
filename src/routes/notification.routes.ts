@@ -23,6 +23,13 @@ router.patch('/read-all', notificationController.markAllAsRead.bind(notification
 // Delete notification
 router.delete('/:id', notificationController.deleteNotification.bind(notificationController));
 
+// Get filterable recipient list for targeting (Admin and Staff only)
+router.get(
+  '/recipients',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  notificationController.getRecipients.bind(notificationController)
+);
+
 // Send notification (Admin and Staff only)
 router.post(
   '/send',

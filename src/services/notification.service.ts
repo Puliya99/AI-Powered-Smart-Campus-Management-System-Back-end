@@ -1,3 +1,4 @@
+import { In } from 'typeorm';
 import { AppDataSource } from '../config/database';
 import { Notification } from '../entities/Notification.entity';
 import { User } from '../entities/User.entity';
@@ -62,12 +63,11 @@ export class NotificationService {
 
     const savedNotification = await this.notificationRepository.save(notification);
 
-    if (data.sendEmail) {
-      try {
-        await emailService.sendNotificationEmail(user.email, data.title, data.message, data.link);
-      } catch (emailError) {
-        console.error('Failed to send notification email:', emailError);
-      }
+    // Always send email for every notification
+    try {
+      await emailService.sendNotificationEmail(user.email, data.title, data.message, data.link, user.firstName);
+    } catch (emailError) {
+      console.error('Failed to send notification email:', emailError);
     }
 
     return savedNotification;
@@ -95,17 +95,15 @@ export class NotificationService {
 
     const savedNotifications = await this.notificationRepository.save(notifications);
 
-    // Send emails if requested
-    if (data.sendEmail) {
-      try {
-        const users = await this.userRepository.findByIds(data.userIds);
-        const emailPromises = users.map(user => 
-          emailService.sendNotificationEmail(user.email, data.title, data.message, data.link)
-        );
-        await Promise.all(emailPromises);
-      } catch (emailError) {
-        console.error('Failed to send notification emails:', emailError);
-      }
+    // Always send email for every notification
+    try {
+      const users = await this.userRepository.findBy({ id: In(data.userIds) });
+      const emailPromises = users.map(user =>
+        emailService.sendNotificationEmail(user.email, data.title, data.message, data.link, user.firstName)
+      );
+      await Promise.allSettled(emailPromises);
+    } catch (emailError) {
+      console.error('Failed to send notification emails:', emailError);
     }
 
     return savedNotifications;
