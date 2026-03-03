@@ -15,8 +15,11 @@ router.post(
   videoMeetingController.createMeeting.bind(videoMeetingController)
 );
 
-// Get my active meetings
+// Get my active meetings (lecturer)
 router.get('/my-active', videoMeetingController.getMyActiveMeetings.bind(videoMeetingController));
+
+// Get active meetings for student's enrolled batches
+router.get('/student-active', videoMeetingController.getStudentActiveMeetings.bind(videoMeetingController));
 
 // Get meeting history
 router.get('/history', videoMeetingController.getMeetingHistory.bind(videoMeetingController));
