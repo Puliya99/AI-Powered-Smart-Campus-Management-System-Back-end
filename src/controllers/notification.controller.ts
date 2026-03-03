@@ -1,6 +1,10 @@
 import { Request, Response } from 'express';
 import notificationService from '../services/notification.service';
 import { NotificationType } from '../enums/NotificationType.enum';
+import { AppDataSource } from '../config/database';
+import { User } from '../entities/User.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
+import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
 
 export class NotificationController {
   // Get current user's notifications
@@ -100,6 +104,63 @@ export class NotificationController {
       res.status(400).json({
         status: 'error',
         message: error.message || 'Failed to delete notification',
+      });
+    }
+  }
+
+  // Get filterable recipient list for admin notification targeting
+  async getRecipients(req: Request, res: Response) {
+    try {
+      const { role, centerId, programId, batchId } = req.query;
+
+      const userRepo = AppDataSource.getRepository(User);
+      const enrollmentRepo = AppDataSource.getRepository(Enrollment);
+
+      let users: User[];
+
+      if (batchId || programId) {
+        // Resolve recipients through active enrollments (students only)
+        const enrollmentWhere: any = { status: EnrollmentStatus.ACTIVE };
+        if (batchId) enrollmentWhere.batch = { id: batchId as string };
+        if (programId) enrollmentWhere.program = { id: programId as string };
+
+        const enrollments = await enrollmentRepo.find({
+          where: enrollmentWhere,
+          relations: ['student', 'student.user', 'student.user.center'],
+        });
+
+        const seen = new Set<string>();
+        users = [];
+        for (const e of enrollments) {
+          const u = e.student?.user;
+          if (!u || seen.has(u.id)) continue;
+          if (centerId && u.center?.id !== centerId) continue;
+          if (role && u.role !== role) continue;
+          seen.add(u.id);
+          users.push(u);
+        }
+      } else {
+        // Filter users directly
+        const queryBuilder = userRepo
+          .createQueryBuilder('user')
+          .leftJoinAndSelect('user.center', 'center')
+          .where('user.isActive = :active', { active: true })
+          .orderBy('user.firstName', 'ASC');
+
+        if (role) queryBuilder.andWhere('user.role = :role', { role });
+        if (centerId) queryBuilder.andWhere('center.id = :centerId', { centerId });
+
+        users = await queryBuilder.getMany();
+      }
+
+      res.json({
+        status: 'success',
+        data: { users, total: users.length },
+      });
+    } catch (error: any) {
+      res.status(500).json({
+        status: 'error',
+        message: error.message || 'Failed to fetch recipients',
       });
     }
   }
