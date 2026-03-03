@@ -1017,6 +1017,146 @@ export class ResultController {
       res.status(500).json({ status: 'error', message: error.message || 'Failed to notify students' });
     }
   }
+
+  // ── Student Risk Report ───────────────────────────────────────────────────
+
+  /** GET /results/student-risk  – list all enrolled students with their risk profile */
+  async getStudentRiskReport(req: Request, res: Response) {
+    try {
+      const { programId, batchId } = req.query as Record<string, string>;
+      const user = (req as any).user;
+
+      // Resolve centerId: USER role is forced to their own center
+      let centerId: string | undefined;
+      if (user.role === Role.USER) {
+        centerId = user.centerId ?? undefined;
+      } else {
+        centerId = (req.query.centerId as string) || undefined;
+      }
+
+      // Build enrollment query with student + program (+ modules) + batch relations
+      let qb = this.enrollmentRepository
+        .createQueryBuilder('e')
+        .leftJoinAndSelect('e.student', 'student')
+        .leftJoinAndSelect('student.user', 'u')
+        .leftJoinAndSelect('e.program', 'program')
+        .leftJoinAndSelect('program.modules', 'module')
+        .leftJoinAndSelect('e.batch', 'batch')
+        .where('e.status = :status', { status: EnrollmentStatus.ACTIVE });
+
+      if (programId) {
+        qb = qb.andWhere('program.id = :programId', { programId });
+      }
+      if (batchId) {
+        qb = qb.andWhere('batch.id = :batchId', { batchId });
+      }
+      if (centerId) {
+        qb = qb
+          .leftJoin('batch.centers', 'bc')
+          .andWhere('bc.id = :centerId', { centerId });
+      }
+
+      const enrollments = await qb.getMany();
+
+      // Deduplicate: keep one enrollment per (studentId, programId)
+      // A student can be in the same program across multiple batches — take the last one
+      const dedupMap = new Map<string, typeof enrollments[0]>();
+      for (const enr of enrollments) {
+        const key = `${enr.student.id}::${enr.program.id}`;
+        dedupMap.set(key, enr);
+      }
+      const uniqueEnrollments = Array.from(dedupMap.values());
+
+      // Compute risk for each student in their program context
+      const studentRows = await Promise.all(
+        uniqueEnrollments.map(async (enr) => {
+          const student  = enr.student;
+          const program  = enr.program;
+          const batch    = enr.batch;
+          const moduleIds: string[] = (program.modules ?? []).map((m: any) => m.id);
+
+          const risk = await computeRiskFactors(student.id, student.user.id, moduleIds);
+
+          return {
+            studentId:        student.id,
+            universityNumber: student.universityNumber,
+            name:             `${student.user.firstName} ${student.user.lastName}`,
+            email:            student.user.email,
+            program: {
+              id:          program.id,
+              programCode: program.programCode,
+              programName: program.programName,
+            },
+            batch: batch ? {
+              id:          batch.id,
+              batchNumber: batch.batchNumber,
+            } : null,
+            enrollmentStatus: enr.status,
+            risk,
+          };
+        })
+      );
+
+      const highRisk   = studentRows.filter(s => s.risk.riskLevel === 'HIGH').length;
+      const mediumRisk = studentRows.filter(s => s.risk.riskLevel === 'MEDIUM').length;
+      const lowRisk    = studentRows.filter(s => s.risk.riskLevel === 'LOW').length;
+
+      res.json({
+        status: 'success',
+        data: {
+          summary: { total: studentRows.length, highRisk, mediumRisk, lowRisk },
+          students: studentRows,
+        },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to generate student risk report' });
+    }
+  }
+
+  /** POST /results/student-risk/notify  – send risk alert notifications to given students */
+  async notifyRiskStudents(req: Request, res: Response) {
+    try {
+      const { studentIds, title, message } = req.body as {
+        studentIds: string[];
+        title: string;
+        message: string;
+      };
+
+      if (!Array.isArray(studentIds) || studentIds.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'studentIds array is required' });
+      }
+      if (!title?.trim() || !message?.trim()) {
+        return res.status(400).json({ status: 'error', message: 'title and message are required' });
+      }
+
+      const students = await this.studentRepository.find({
+        where: studentIds.map(id => ({ id })),
+        relations: ['user'],
+      });
+
+      if (students.length === 0) {
+        return res.status(404).json({ status: 'error', message: 'No students found for the provided IDs' });
+      }
+
+      const userIds = students.map(s => s.user.id);
+      await notificationService.createNotifications({
+        userIds,
+        title,
+        message,
+        type:      NotificationType.AI_ALERT,
+        link:      '/student/results',
+        sendEmail: true,
+      });
+
+      res.json({
+        status:  'success',
+        message: `Notifications sent to ${students.length} student(s)`,
+        data:    { notified: students.length },
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to send notifications' });
+    }
+  }
 }
 
 export default new ResultController();
