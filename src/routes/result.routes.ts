@@ -5,22 +5,73 @@ import { Role } from '../enums/Role.enum';
 
 const router = Router();
 
-// All routes require authentication
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
-// Get my own results (Student)
-router.get('/my-results', authMiddleware.authorize(Role.STUDENT), resultController.getMyResults.bind(resultController));
+// ── Student ───────────────────────────────────────────────────────────────────
+router.get(
+  '/my-results',
+  authMiddleware.authorize(Role.STUDENT),
+  resultController.getMyResults.bind(resultController),
+);
 
-// Get results for a module (Lecturer/Admin)
-router.get('/module/:moduleId', authMiddleware.authorize(Role.LECTURER, Role.ADMIN), resultController.getResultsByModule.bind(resultController));
+// ── Graduation report (Admin / USER) ─────────────────────────────────────────
+router.get(
+  '/graduation-report',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.getGraduationReport.bind(resultController),
+);
 
-// Bulk upsert results (Lecturer/Admin)
-router.post('/bulk', authMiddleware.authorize(Role.LECTURER, Role.ADMIN), resultController.bulkUpsertResults.bind(resultController));
+// ── Repeat exam enrollments ───────────────────────────────────────────────────
+router.get(
+  '/repeats',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.getRepeatEnrollments.bind(resultController),
+);
 
-// Upsert a single result
-router.post('/', authMiddleware.authorize(Role.LECTURER, Role.ADMIN), resultController.upsertResult.bind(resultController));
+router.post(
+  '/repeats',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.createRepeatExamEnrollment.bind(resultController),
+);
 
-// Delete a result
-router.delete('/:id', authMiddleware.authorize(Role.LECTURER, Role.ADMIN), resultController.deleteResult.bind(resultController));
+router.patch(
+  '/repeats/:id',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.updateRepeatEnrollment.bind(resultController),
+);
+
+router.post(
+  '/repeats/notify-batch',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  resultController.notifyRepeatStudentsForBatch.bind(resultController),
+);
+
+// ── Module results (Lecturer / Admin / USER) ──────────────────────────────────
+router.get(
+  '/module/:moduleId',
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.USER),
+  resultController.getResultsByModule.bind(resultController),
+);
+
+// ── Bulk upsert results ───────────────────────────────────────────────────────
+router.post(
+  '/bulk',
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.USER),
+  resultController.bulkUpsertResults.bind(resultController),
+);
+
+// ── Single upsert ─────────────────────────────────────────────────────────────
+router.post(
+  '/',
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.USER),
+  resultController.upsertResult.bind(resultController),
+);
+
+// ── Delete result ─────────────────────────────────────────────────────────────
+router.delete(
+  '/:id',
+  authMiddleware.authorize(Role.LECTURER, Role.ADMIN, Role.USER),
+  resultController.deleteResult.bind(resultController),
+);
 
 export default router;
