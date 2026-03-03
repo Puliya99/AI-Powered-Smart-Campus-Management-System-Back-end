@@ -431,7 +431,7 @@ export class QuizController {
 
       const attempt = await this.attemptRepository.findOne({
         where: { id },
-        relations: ['quiz', 'quiz.lecturer', 'quiz.lecturer.user', 'answers'],
+        relations: ['quiz', 'quiz.lecturer', 'quiz.lecturer.user', 'quiz.module', 'answers', 'student', 'student.user'],
       });
 
       if (!attempt) {
@@ -482,6 +482,21 @@ export class QuizController {
       attempt.timeSpentSeconds = totalSpent; // Accumulated time from previous sessions
 
       await this.attemptRepository.save(attempt);
+
+      // Notify the student that their quiz attempt has been restarted
+      try {
+        if (attempt.student?.user) {
+          await notificationService.createNotification({
+            userId: attempt.student.user.id,
+            title: `Quiz Restarted: ${attempt.quiz.title}`,
+            message: `Your attempt for the quiz "${attempt.quiz.title}"${attempt.quiz.module ? ` in ${attempt.quiz.module.moduleName}` : ''} has been restarted by your lecturer. You can now resume the quiz.`,
+            type: NotificationType.GENERAL,
+            link: '/student/quizzes',
+          });
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify student about quiz restart:', notifyError);
+      }
 
       res.json({ status: 'success', message: 'Attempt restarted successfully', data: { attempt } });
     } catch (error: any) {
