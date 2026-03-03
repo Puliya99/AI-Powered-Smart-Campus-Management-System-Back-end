@@ -491,6 +491,26 @@ export class StudentController {
 
       await this.studentRepository.save(student);
 
+      // Update enrollment batch/program if provided
+      if (updateData.batchId || updateData.programId) {
+        const enrollment = await this.enrollmentRepository.findOne({
+          where: { student: { id: student.id } },
+          order: { createdAt: 'DESC' },
+        });
+
+        if (enrollment) {
+          if (updateData.batchId) {
+            const batch = await this.batchRepository.findOne({ where: { id: updateData.batchId } });
+            if (batch) enrollment.batch = batch;
+          }
+          if (updateData.programId) {
+            const program = await this.programRepository.findOne({ where: { id: updateData.programId } });
+            if (program) enrollment.program = program;
+          }
+          await this.enrollmentRepository.save(enrollment);
+        }
+      }
+
       res.json({
         status: 'success',
         message: 'Student updated successfully',
