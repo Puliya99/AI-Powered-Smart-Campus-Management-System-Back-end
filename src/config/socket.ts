@@ -100,6 +100,30 @@ export const setupSocketIO = (httpServer: HttpServer) => {
       }
     );
 
+    // Chat messages – relay to everyone else in the room (sender adds their own
+    // message locally so they always see it regardless of room membership state)
+    socket.on(
+      'chat-message',
+      (payload: { meetingCode: string; text: string; senderName: string; senderId: string }) => {
+        socket.to(payload.meetingCode).emit('chat-message', {
+          text: payload.text,
+          senderName: payload.senderName,
+          senderId: payload.senderId,
+          socketId: socket.id,
+          timestamp: new Date().toISOString(),
+        });
+      }
+    );
+
+    // Screen share signaling – relay to everyone else in the room
+    socket.on('screen-share-started', ({ meetingCode }: { meetingCode: string }) => {
+      socket.to(meetingCode).emit('screen-share-started', { socketId: socket.id });
+    });
+
+    socket.on('screen-share-stopped', ({ meetingCode }: { meetingCode: string }) => {
+      socket.to(meetingCode).emit('screen-share-stopped', { socketId: socket.id });
+    });
+
     // When user leaves / disconnects
     socket.on('disconnect', () => {
       logger.info(`Socket disconnected: ${socket.id}`);
@@ -110,6 +134,8 @@ export const setupSocketIO = (httpServer: HttpServer) => {
 
           // Notify others in room
           io.to(roomCode).emit('user-left', socket.id);
+          // Clear spotlight if this user was sharing
+          io.to(roomCode).emit('screen-share-stopped', { socketId: socket.id });
 
           if (rooms[roomCode].size === 0) {
             delete rooms[roomCode];
