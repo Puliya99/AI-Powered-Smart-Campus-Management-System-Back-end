@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { EnrollmentController } from '../controllers/enrollment.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -13,6 +14,7 @@ router.use(authMiddleware.authenticate.bind(authMiddleware));
 router.get(
   '/',
   authMiddleware.authorize(Role.ADMIN, Role.USER),
+  applyCenterFilter,
   enrollmentController.getAllEnrollments.bind(enrollmentController)
 );
 
