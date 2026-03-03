@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import lecturerController from '../controllers/lecturer.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -12,11 +13,12 @@ router.use(authMiddleware.authenticate.bind(authMiddleware));
 router.get(
   '/',
   authMiddleware.authorize(Role.ADMIN, Role.USER),
+  applyCenterFilter,
   lecturerController.getAllLecturers.bind(lecturerController)
 );
 
 // Get lecturers dropdown (for forms)
-router.get('/dropdown', lecturerController.getLecturersDropdown.bind(lecturerController));
+router.get('/dropdown', applyCenterFilter, lecturerController.getLecturersDropdown.bind(lecturerController));
 
 // Get current lecturer profile
 router.get('/profile/me', lecturerController.getCurrentLecturerProfile.bind(lecturerController));
