@@ -604,6 +604,11 @@ export class EmailService {
    * Send a general notification email
    */
   async sendNotificationEmail(email: string, title: string, message: string, link?: string, firstName?: string) {
+    // Skip if SMTP is not configured
+    if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASSWORD) {
+      return { success: false, reason: 'SMTP not configured' };
+    }
+
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
     const readUrl = link ? `${frontendUrl}${link}` : `${frontendUrl}/notifications`;
 

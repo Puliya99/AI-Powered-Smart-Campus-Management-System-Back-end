@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import * as xlsx from 'xlsx';
 import { AppDataSource } from '../config/database';
 import { Student } from '../entities/Student.entity';
 import { User } from '../entities/User.entity';
@@ -992,6 +993,238 @@ export class StudentController {
       });
     } catch (error: any) {
       return res.status(500).json({ status: 'error', message: error.message || 'Failed to fetch fingerprint status' });
+    }
+  }
+  // ==================== Export ====================
+
+  async exportStudents(req: Request, res: Response) {
+    try {
+      const { centerId, batchId, paymentType, isActive } = req.query;
+
+      const queryBuilder = this.studentRepository
+        .createQueryBuilder('student')
+        .leftJoinAndSelect('student.user', 'user')
+        .leftJoinAndSelect('user.center', 'center')
+        .leftJoinAndSelect('student.enrollments', 'enrollments')
+        .leftJoinAndSelect('enrollments.program', 'program')
+        .leftJoinAndSelect('enrollments.batch', 'batch')
+        .orderBy('user.firstName', 'ASC');
+
+      if (centerId)    queryBuilder.andWhere('center.id = :centerId', { centerId });
+      if (paymentType) queryBuilder.andWhere('student.paymentType = :paymentType', { paymentType });
+      if (isActive !== undefined && isActive !== '')
+        queryBuilder.andWhere('user.isActive = :isActive', { isActive: isActive === 'true' });
+      if (batchId)
+        queryBuilder.andWhere('batch.id = :batchId', { batchId });
+
+      const students = await queryBuilder.getMany();
+
+      const rows = students.map(s => {
+        const enrollment = s.enrollments?.[0];
+        return {
+          'Registration Number': s.user.registrationNumber,
+          'University Number':   s.universityNumber,
+          'Title':               s.user.title,
+          'First Name':          s.user.firstName,
+          'Last Name':           s.user.lastName,
+          'Name With Initials':  s.user.nameWithInitials,
+          'Gender':              s.user.gender,
+          'Date of Birth':       s.user.dateOfBirth ? new Date(s.user.dateOfBirth).toISOString().split('T')[0] : '',
+          'NIC':                 s.user.nic,
+          'Email':               s.user.email,
+          'Username':            s.user.username,
+          'Mobile Number':       s.user.mobileNumber,
+          'Home Number':         s.user.homeNumber || '',
+          'Address':             s.user.address || '',
+          'Payment Type':        s.paymentType,
+          'Center':              s.user.center?.centerName || '',
+          'Program':             enrollment?.program?.programName || '',
+          'Batch':               enrollment?.batch?.batchNumber || '',
+          'Status':              s.user.isActive ? 'Active' : 'Inactive',
+          'Registered At':       s.user.createdAt ? new Date(s.user.createdAt).toISOString().split('T')[0] : '',
+        };
+      });
+
+      const wb = xlsx.utils.book_new();
+      const ws = xlsx.utils.json_to_sheet(rows);
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 18 }, { wch: 16 }, { wch: 8 }, { wch: 16 }, { wch: 16 },
+        { wch: 22 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 28 },
+        { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 22 }, { wch: 14 },
+        { wch: 18 }, { wch: 22 }, { wch: 14 }, { wch: 10 }, { wch: 14 },
+      ];
+
+      xlsx.utils.book_append_sheet(wb, ws, 'Students');
+
+      const buffer = xlsx.write(wb, { type: 'buffer', bookType: 'xlsx' });
+      const filename = `students_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+      res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.send(buffer);
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to export students' });
+    }
+  }
+
+  // ==================== Import ====================
+
+  async importStudents(req: Request, res: Response) {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ status: 'error', message: 'No file uploaded' });
+      }
+
+      const wb = xlsx.read(req.file.buffer, { type: 'buffer' });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows: any[] = xlsx.utils.sheet_to_json(ws, { defval: '' });
+
+      if (rows.length === 0) {
+        return res.status(400).json({ status: 'error', message: 'Excel file contains no data rows' });
+      }
+
+      const summary = {
+        total:    rows.length,
+        imported: 0,
+        skipped:  0,
+        errors:   [] as { row: number; name: string; reason: string }[],
+      };
+
+      for (let i = 0; i < rows.length; i++) {
+        const row   = rows[i];
+        const rowNum = i + 2; // Excel row (header = 1, data starts at 2)
+        const displayName = `${row['First Name'] || ''} ${row['Last Name'] || ''}`.trim() || `Row ${rowNum}`;
+
+        try {
+          // ── Validate required fields ───────────────────────────────────────
+          const required: Record<string, string> = {
+            'First Name':    'First Name',
+            'Last Name':     'Last Name',
+            'Email':         'Email',
+            'Username':      'Username',
+            'NIC':           'NIC',
+            'Mobile Number': 'Mobile Number',
+            'Date of Birth': 'Date of Birth',
+          };
+          for (const [col, label] of Object.entries(required)) {
+            if (!String(row[col] ?? '').trim()) {
+              throw new Error(`Missing required field: ${label}`);
+            }
+          }
+
+          const email        = String(row['Email']).trim().toLowerCase();
+          const username     = String(row['Username']).trim();
+          const nic          = String(row['NIC']).trim();
+          const mobileNumber = String(row['Mobile Number']).trim();
+
+          // ── Check duplicates ───────────────────────────────────────────────
+          const existing = await this.userRepository.findOne({
+            where: [{ email }, { username }, { nic }, { mobileNumber }],
+          });
+          if (existing) {
+            let reason = 'Duplicate record';
+            if (existing.email        === email)        reason = 'Email already registered';
+            else if (existing.username === username)    reason = 'Username already taken';
+            else if (existing.nic      === nic)         reason = 'NIC already registered';
+            else if (existing.mobileNumber === mobileNumber) reason = 'Mobile number already registered';
+            throw new Error(reason);
+          }
+
+          // ── Resolve optional relations ─────────────────────────────────────
+          let centerId:  string | undefined;
+          let programId: string | undefined;
+          let batchId:   string | undefined;
+
+          if (row['Center']) {
+            const center = await this.centerRepository.findOne({ where: { centerName: String(row['Center']).trim() } });
+            if (center) centerId = center.id;
+          }
+          if (row['Program']) {
+            const program = await this.programRepository.findOne({ where: { programName: String(row['Program']).trim() } });
+            if (program) programId = program.id;
+          }
+          if (row['Batch']) {
+            const batch = await this.batchRepository.findOne({ where: { batchNumber: String(row['Batch']).trim() } });
+            if (batch) batchId = batch.id;
+          }
+
+          // ── Parse date of birth (handle Excel serial numbers) ─────────────
+          let dateOfBirth: Date;
+          const dobRaw = row['Date of Birth'];
+          if (typeof dobRaw === 'number') {
+            // Excel date serial → JS date
+            dateOfBirth = new Date(Math.round((dobRaw - 25569) * 86400 * 1000));
+          } else {
+            dateOfBirth = new Date(String(dobRaw));
+          }
+          if (isNaN(dateOfBirth.getTime())) dateOfBirth = new Date('2000-01-01');
+
+          // ── Create records ─────────────────────────────────────────────────
+          const firstName = String(row['First Name']).trim();
+          const lastName  = String(row['Last Name']).trim();
+
+          const registrationNumber = await this.generateRegistrationNumber();
+          const universityNumber   = await this.generateUniversityNumber();
+
+          const user = this.userRepository.create({
+            username,
+            email,
+            password:          'Student123',
+            firstName,
+            lastName,
+            role:              'STUDENT' as any,
+            registrationNumber,
+            title:             row['Title'] || 'Mr',
+            nameWithInitials:  this.generateNameWithInitials(firstName, lastName),
+            gender:            row['Gender'] || ('OTHER' as any),
+            dateOfBirth,
+            nic,
+            mobileNumber,
+            homeNumber:        row['Home Number'] ? String(row['Home Number']) : undefined,
+            address:           row['Address'] || 'Not provided',
+            center:            centerId ? ({ id: centerId } as any) : undefined,
+          });
+
+          const savedUser = await this.userRepository.save(user);
+
+          try {
+            await emailService.sendAccountCreationEmail(savedUser.email, savedUser.firstName, savedUser.username, 'Student123');
+          } catch { /* non-fatal */ }
+
+          const student = this.studentRepository.create({
+            universityNumber,
+            paymentType: (row['Payment Type'] === 'INSTALLMENT' ? 'INSTALLMENT' : 'FULL') as any,
+          });
+          student.user = savedUser;
+          const savedStudent = await this.studentRepository.save(student);
+
+          if (programId && batchId) {
+            const enrollment = this.enrollmentRepository.create({
+              student:        savedStudent,
+              program:        { id: programId } as any,
+              batch:          { id: batchId }   as any,
+              enrollmentDate: new Date(),
+              status:         'ACTIVE' as any,
+            });
+            await this.enrollmentRepository.save(enrollment);
+          }
+
+          summary.imported++;
+        } catch (err: any) {
+          summary.skipped++;
+          summary.errors.push({ row: rowNum, name: displayName, reason: err.message || 'Unknown error' });
+        }
+      }
+
+      res.status(200).json({
+        status:  'success',
+        message: `Imported ${summary.imported} of ${summary.total} students`,
+        data:    summary,
+      });
+    } catch (error: any) {
+      res.status(500).json({ status: 'error', message: error.message || 'Failed to import students' });
     }
   }
 }

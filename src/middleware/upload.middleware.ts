@@ -60,3 +60,23 @@ export const uploadFields = (fields: { name: string; maxCount?: number }[]) =>
 
 // Default export (most common usage)
 export default upload;
+
+// ── Excel / spreadsheet upload (memory storage, no disk write) ────────────────
+const excelFileFilter = (req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  const allowedExts  = /xlsx|xls/;
+  const allowedMimes = /spreadsheetml|ms-excel|officedocument/;
+  const extOk  = allowedExts.test(path.extname(file.originalname).toLowerCase());
+  const mimeOk = allowedMimes.test(file.mimetype);
+
+  if (extOk || mimeOk) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only .xlsx and .xls files are allowed for import'));
+  }
+};
+
+export const uploadExcel = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB max
+  fileFilter: excelFileFilter,
+}).single('file');

@@ -81,16 +81,18 @@ export class AuthMiddleware {
         });
       }
 
-      if (error.name === 'JsonWebTokenError') {
+      if (error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
         return res.status(401).json({
           status: 'error',
           message: 'Invalid token',
         });
       }
 
-      return res.status(500).json({
+      // Unexpected error (e.g. DB connection failure during auth)
+      console.error('Authentication middleware unexpected error:', error?.message || error);
+      return res.status(503).json({
         status: 'error',
-        message: 'Authentication error',
+        message: 'Authentication service temporarily unavailable. Please try again.',
       });
     }
   }
