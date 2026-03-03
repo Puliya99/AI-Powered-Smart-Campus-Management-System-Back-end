@@ -18,6 +18,7 @@ declare global {
         userId: string;
         role: Role;
         email: string;
+        centerId?: string;
       };
     }
   }
@@ -46,6 +47,7 @@ export class AuthMiddleware {
       const userRepository = AppDataSource.getRepository(User);
       const user = await userRepository.findOne({
         where: { id: decoded.userId },
+        relations: ['center'],
       });
 
       if (!user) {
@@ -67,6 +69,7 @@ export class AuthMiddleware {
         userId: user.id,
         role: user.role,
         email: user.email,
+        centerId: user.center?.id || undefined,
       };
 
       next();

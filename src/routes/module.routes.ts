@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import moduleController from '../controllers/module.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -9,10 +10,10 @@ const router = Router();
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
 // Get all modules (All authenticated users can view)
-router.get('/', moduleController.getAllModules.bind(moduleController));
+router.get('/', applyCenterFilter, moduleController.getAllModules.bind(moduleController));
 
 // Get modules dropdown (for forms)
-router.get('/dropdown', moduleController.getModulesDropdown.bind(moduleController));
+router.get('/dropdown', applyCenterFilter, moduleController.getModulesDropdown.bind(moduleController));
 
 // Get module statistics (Admin, Lecturers, and Staff)
 router.get(
