@@ -46,6 +46,13 @@ router.put(
 // Get meeting participants
 router.get('/:id/participants', videoMeetingController.getMeetingParticipants.bind(videoMeetingController));
 
+// Get online attendance for a meeting (Lecturer and Admin only)
+router.get(
+  '/:id/attendance',
+  authMiddleware.authorize(Role.LECTURER, Role.USER, Role.ADMIN),
+  videoMeetingController.getMeetingAttendance.bind(videoMeetingController)
+);
+
 // Get active meetings for a module
 router.get('/module/:moduleId', videoMeetingController.getActiveMeetingsByModule.bind(videoMeetingController));
 
