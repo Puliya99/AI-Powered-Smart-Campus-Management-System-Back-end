@@ -1,11 +1,16 @@
 import { Server } from 'socket.io';
 import { Server as HttpServer } from 'http';
+import { IsNull } from 'typeorm';
 import { logger } from '../utils/logger';
+import { AppDataSource } from './database';
+import { MeetingParticipant } from '../entities/MeetingParticipant.entity';
 
 interface SocketData {
-  userId: string;
-  userName: string;
-  role: 'LECTURER' | 'STUDENT';
+  userId:      string;
+  userName:    string;
+  role:        'LECTURER' | 'STUDENT' | string;
+  meetingId?:  string;
+  meetingCode?: string;
 }
 
 const rooms: Record<string, Set<string>> = {}; // meetingCode → Set<socket.id>
@@ -40,13 +45,14 @@ export const setupSocketIO = (httpServer: HttpServer) => {
       'join-meeting',
       async (data: {
         meetingCode: string;
-        userId: string;
-        userName: string;
-        role: 'LECTURER' | 'STUDENT';
+        meetingId?:  string;
+        userId:      string;
+        userName:    string;
+        role:        'LECTURER' | 'STUDENT';
       }) => {
-        const { meetingCode, userId, userName, role } = data;
+        const { meetingCode, meetingId, userId, userName, role } = data;
 
-        socket.data = { userId, userName, role } as SocketData;
+        socket.data = { userId, userName, role, meetingId, meetingCode } as SocketData;
 
         // Join socket.io room
         socket.join(meetingCode);
@@ -125,8 +131,25 @@ export const setupSocketIO = (httpServer: HttpServer) => {
     });
 
     // When user leaves / disconnects
-    socket.on('disconnect', () => {
+    socket.on('disconnect', async () => {
       logger.info(`Socket disconnected: ${socket.id}`);
+
+      // ── Mark leave time in DB when browser tab is closed or connection drops ──
+      const { userId, meetingId } = socket.data as SocketData;
+      if (userId && meetingId && AppDataSource.isInitialized) {
+        try {
+          await AppDataSource.getRepository(MeetingParticipant).update(
+            {
+              meeting: { id: meetingId },
+              user:    { id: userId },
+              leftAt:  IsNull(),
+            },
+            { leftAt: new Date() }
+          );
+        } catch (err) {
+          logger.error('Failed to update leftAt on socket disconnect:', err);
+        }
+      }
 
       for (const roomCode in rooms) {
         if (rooms[roomCode].has(socket.id)) {
