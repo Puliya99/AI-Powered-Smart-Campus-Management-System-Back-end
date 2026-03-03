@@ -250,10 +250,27 @@ export class DashboardService {
 
     const user = await this.userRepository.findOne({
       where: { id: userId },
+      relations: ['center'],
     });
 
     if (!user) {
       throw new Error('User not found');
+    }
+
+    const centerId = user.center?.id;
+
+    // Build recent registrations query filtered by staff's center
+    const recentRegistrationsQuery = this.userRepository
+      .createQueryBuilder('user')
+      .where('user.role = :role', { role: Role.STUDENT })
+      .select(['user.id', 'user.firstName', 'user.lastName', 'user.email', 'user.registrationNumber', 'user.createdAt'])
+      .orderBy('user.createdAt', 'DESC')
+      .take(10);
+
+    if (centerId) {
+      recentRegistrationsQuery
+        .innerJoin('user.center', 'center')
+        .andWhere('center.id = :centerId', { centerId });
     }
 
     const [todayEnrollments, pendingDocuments, recentRegistrations, upcomingEvents] =
@@ -263,12 +280,7 @@ export class DashboardService {
           .where('DATE(enrollment.createdAt) = CURRENT_DATE')
           .getCount(),
         0, // Placeholder for documents
-        this.userRepository.find({
-          take: 10,
-          order: { createdAt: 'DESC' },
-          where: { role: Role.STUDENT },
-          select: ['id', 'firstName', 'lastName', 'email', 'registrationNumber', 'createdAt'],
-        }),
+        recentRegistrationsQuery.getMany(),
         this.scheduleRepository.find({
           take: 5,
           where: {
