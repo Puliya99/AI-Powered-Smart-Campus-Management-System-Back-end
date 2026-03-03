@@ -19,6 +19,7 @@ export class ModuleController {
         programId = '',
         lecturerId = '',
         semesterNumber = '',
+        centerId = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
       } = req.query;
@@ -59,6 +60,13 @@ export class ModuleController {
         queryBuilder.andWhere('module.semesterNumber = :semesterNumber', {
           semesterNumber: Number(semesterNumber),
         });
+      }
+
+      // Center filter (Module -> Program -> Centers)
+      if (centerId) {
+        queryBuilder
+          .leftJoin('program.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const [modules, total] = await queryBuilder.getManyAndCount();
@@ -409,15 +417,22 @@ export class ModuleController {
   // Get modules dropdown (for forms)
   async getModulesDropdown(req: Request, res: Response) {
     try {
-      const { programId } = req.query;
+      const { programId, centerId } = req.query;
 
       const queryBuilder = this.moduleRepository
         .createQueryBuilder('module')
+        .leftJoin('module.program', 'program')
         .select(['module.id', 'module.moduleCode', 'module.moduleName'])
         .orderBy('module.moduleName', 'ASC');
 
       if (programId) {
         queryBuilder.where('module.programId = :programId', { programId });
+      }
+
+      if (centerId) {
+        queryBuilder
+          .leftJoin('program.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const modules = await queryBuilder.getMany();
