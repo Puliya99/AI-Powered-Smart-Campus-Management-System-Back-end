@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import studentController from '../controllers/student.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
+import { uploadExcel } from '../middleware/upload.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -12,6 +14,7 @@ router.use(authMiddleware.authenticate.bind(authMiddleware));
 router.get(
   '/',
   authMiddleware.authorize(Role.ADMIN, Role.USER),
+  applyCenterFilter,
   studentController.getAllStudents.bind(studentController)
 );
 
@@ -54,6 +57,7 @@ router.get(
 router.get(
   '/dropdown',
   authMiddleware.authorize(Role.ADMIN, Role.USER),
+  applyCenterFilter,
   studentController.getStudentsDropdown.bind(studentController)
 );
 
@@ -108,6 +112,23 @@ router.post(
   '/:id/passkey/regenerate',
   authMiddleware.authorize(Role.ADMIN),
   studentController.regenerateStudentPasskey.bind(studentController)
+);
+
+// ==================== Import / Export ====================
+
+// Export students to Excel (Admin and Staff only)
+router.get(
+  '/export',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  studentController.exportStudents.bind(studentController)
+);
+
+// Import students from Excel (Admin only)
+router.post(
+  '/import',
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
+  uploadExcel,
+  studentController.importStudents.bind(studentController)
 );
 
 // ==================== CRUD Routes ====================

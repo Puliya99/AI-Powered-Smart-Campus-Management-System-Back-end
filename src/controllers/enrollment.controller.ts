@@ -23,6 +23,7 @@ export class EnrollmentController {
         programId,
         batchId,
         studentId,
+        centerId,
       } = req.query;
 
       const skip = (Number(page) - 1) * Number(limit);
@@ -63,6 +64,13 @@ export class EnrollmentController {
       // Student filter
       if (studentId) {
         queryBuilder.andWhere('student.id = :studentId', { studentId });
+      }
+
+      // Center filter (Enrollment -> Batch -> Centers)
+      if (centerId) {
+        queryBuilder
+          .leftJoin('batch.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const [enrollments, total] = await queryBuilder.getManyAndCount();

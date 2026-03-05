@@ -3,11 +3,16 @@ import { AppDataSource } from '../config/database';
 import { Module } from '../entities/Module.entity';
 import { Program } from '../entities/Program.entity';
 import { Lecturer } from '../entities/Lecturer.entity';
+import { Enrollment } from '../entities/Enrollment.entity';
+import { EnrollmentStatus } from '../enums/EnrollmentStatus.enum';
+import notificationService from '../services/notification.service';
+import { NotificationType } from '../enums/NotificationType.enum';
 
 export class ModuleController {
   private moduleRepository = AppDataSource.getRepository(Module);
   private programRepository = AppDataSource.getRepository(Program);
   private lecturerRepository = AppDataSource.getRepository(Lecturer);
+  private enrollmentRepository = AppDataSource.getRepository(Enrollment);
 
   // Get all modules with pagination and filters
   async getAllModules(req: Request, res: Response) {
@@ -19,6 +24,7 @@ export class ModuleController {
         programId = '',
         lecturerId = '',
         semesterNumber = '',
+        centerId = '',
         sortBy = 'createdAt',
         sortOrder = 'DESC',
       } = req.query;
@@ -59,6 +65,13 @@ export class ModuleController {
         queryBuilder.andWhere('module.semesterNumber = :semesterNumber', {
           semesterNumber: Number(semesterNumber),
         });
+      }
+
+      // Center filter (Module -> Program -> Centers)
+      if (centerId) {
+        queryBuilder
+          .leftJoin('program.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const [modules, total] = await queryBuilder.getManyAndCount();
@@ -210,6 +223,45 @@ export class ModuleController {
         where: { id: module.id },
         relations: ['program', 'lecturer', 'lecturer.user'],
       });
+
+      // Notify students enrolled in this program
+      try {
+        const enrollments = await this.enrollmentRepository.find({
+          where: { program: { id: program.id }, status: EnrollmentStatus.ACTIVE },
+          relations: ['student', 'student.user'],
+        });
+
+        const studentUserIds = enrollments.map(e => e.student.user.id);
+
+        if (studentUserIds.length > 0) {
+          await notificationService.createNotifications({
+            userIds: studentUserIds,
+            title: `New Module Added: ${moduleName}`,
+            message: `A new module "${moduleName}" (${moduleCode}) has been added to your program for Semester ${semesterNumber}.`,
+            type: NotificationType.GENERAL,
+            link: '/student/modules',
+          });
+        }
+
+        // Notify the assigned lecturer
+        if (lecturer) {
+          const lecturerWithUser = await this.lecturerRepository.findOne({
+            where: { id: lecturer.id },
+            relations: ['user'],
+          });
+          if (lecturerWithUser) {
+            await notificationService.createNotification({
+              userId: lecturerWithUser.user.id,
+              title: `New Module Assigned: ${moduleName}`,
+              message: `You have been assigned to teach "${moduleName}" (${moduleCode}) for Semester ${semesterNumber}.`,
+              type: NotificationType.GENERAL,
+              link: '/lecturer/modules',
+            });
+          }
+        }
+      } catch (notifyError) {
+        console.error('Failed to notify about new module:', notifyError);
+      }
 
       res.status(201).json({
         status: 'success',
@@ -409,15 +461,22 @@ export class ModuleController {
   // Get modules dropdown (for forms)
   async getModulesDropdown(req: Request, res: Response) {
     try {
-      const { programId } = req.query;
+      const { programId, centerId } = req.query;
 
       const queryBuilder = this.moduleRepository
         .createQueryBuilder('module')
+        .leftJoin('module.program', 'program')
         .select(['module.id', 'module.moduleCode', 'module.moduleName'])
         .orderBy('module.moduleName', 'ASC');
 
       if (programId) {
         queryBuilder.where('module.programId = :programId', { programId });
+      }
+
+      if (centerId) {
+        queryBuilder
+          .leftJoin('program.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const modules = await queryBuilder.getMany();

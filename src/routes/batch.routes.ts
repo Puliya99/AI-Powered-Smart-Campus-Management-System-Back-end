@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import batchController from '../controllers/batch.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -9,10 +10,10 @@ const router = Router();
 router.use(authMiddleware.authenticate.bind(authMiddleware));
 
 // Get all batches (All authenticated users can view)
-router.get('/', batchController.getAllBatches.bind(batchController));
+router.get('/', applyCenterFilter, batchController.getAllBatches.bind(batchController));
 
 // Get batches dropdown (for forms)
-router.get('/dropdown', batchController.getBatchesDropdown.bind(batchController));
+router.get('/dropdown', applyCenterFilter, batchController.getBatchesDropdown.bind(batchController));
 
 // Get batch statistics (Admin and Staff)
 router.get(

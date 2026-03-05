@@ -450,7 +450,7 @@ export class BatchController {
   // Get batches dropdown (for forms)
   async getBatchesDropdown(req: Request, res: Response) {
     try {
-      const { programId, status } = req.query;
+      const { programId, status, centerId } = req.query;
 
       const queryBuilder = this.batchRepository
         .createQueryBuilder('batch')
@@ -470,6 +470,10 @@ export class BatchController {
 
       if (status) {
         queryBuilder.andWhere('batch.status = :status', { status });
+      }
+
+      if (centerId) {
+        queryBuilder.innerJoin('batch.centers', 'center', 'center.id = :centerId', { centerId });
       }
 
       const batches = await queryBuilder.getMany();

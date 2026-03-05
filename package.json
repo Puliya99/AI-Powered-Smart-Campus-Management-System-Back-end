@@ -7,7 +7,8 @@
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "test-predict": "ts-node src/scripts/test-prediction.ts",
     "build": "tsc",
-    "test": "jest",
+    "test": "jest --config jest.config.ts",
+    "test:coverage": "jest --config jest.config.ts --coverage",
     "typeorm": "typeorm-ts-node-commonjs"
   },
   "keywords": [],
@@ -38,7 +39,8 @@
     "socket.io": "^4.8.3",
     "typeorm": "^0.3.28",
     "uuid": "^13.0.0",
-    "winston": "^3.19.0"
+    "winston": "^3.19.0",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -54,6 +56,7 @@
     "@types/nodemailer": "^7.0.4",
     "@types/supertest": "^6.0.3",
     "@types/uuid": "^10.0.0",
+    "@types/xlsx": "^0.0.35",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
     "eslint": "^8.57.1",

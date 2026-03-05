@@ -93,6 +93,7 @@ export class AuthService {
     const user = await this.userRepository
       .createQueryBuilder('user')
       .addSelect('user.password')
+      .leftJoinAndSelect('user.center', 'center')
       .where('user.email = :email', { email: data.email })
       .getOne();
 

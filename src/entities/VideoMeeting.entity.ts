@@ -2,6 +2,7 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, CreateDat
 import { Module } from "./Module.entity";
 import { Lecturer } from "./Lecturer.entity";
 import { MeetingParticipant } from "./MeetingParticipant.entity";
+import { Batch } from "./Batch.entity";
 
 @Entity('video_meetings')
 export class VideoMeeting {
@@ -16,6 +17,9 @@ export class VideoMeeting {
 
   @ManyToOne(() => Lecturer)
   lecturer: Lecturer;
+
+  @ManyToOne(() => Batch, { nullable: true, eager: false })
+  batch: Batch;
 
   @Column({ type: 'varchar', length: 50, unique: true })
   meetingCode: string;

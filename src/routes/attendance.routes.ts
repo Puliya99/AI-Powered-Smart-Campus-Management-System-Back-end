@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import attendanceController from '../controllers/attendance.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -34,7 +35,7 @@ router.get(
 );
 
 // Get all attendance records
-router.get('/', attendanceController.getAllAttendance.bind(attendanceController));
+router.get('/', applyCenterFilter, attendanceController.getAllAttendance.bind(attendanceController));
 
 // Get attendance by ID
 router.get('/:id', attendanceController.getAttendanceById.bind(attendanceController));

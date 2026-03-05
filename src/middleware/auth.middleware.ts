@@ -18,6 +18,7 @@ declare global {
         userId: string;
         role: Role;
         email: string;
+        centerId?: string;
       };
     }
   }
@@ -46,6 +47,7 @@ export class AuthMiddleware {
       const userRepository = AppDataSource.getRepository(User);
       const user = await userRepository.findOne({
         where: { id: decoded.userId },
+        relations: ['center'],
       });
 
       if (!user) {
@@ -67,6 +69,7 @@ export class AuthMiddleware {
         userId: user.id,
         role: user.role,
         email: user.email,
+        centerId: user.center?.id || undefined,
       };
 
       next();
@@ -78,16 +81,18 @@ export class AuthMiddleware {
         });
       }
 
-      if (error.name === 'JsonWebTokenError') {
+      if (error.name === 'JsonWebTokenError' || error.name === 'NotBeforeError') {
         return res.status(401).json({
           status: 'error',
           message: 'Invalid token',
         });
       }
 
-      return res.status(500).json({
+      // Unexpected error (e.g. DB connection failure during auth)
+      console.error('Authentication middleware unexpected error:', error?.message || error);
+      return res.status(503).json({
         status: 'error',
-        message: 'Authentication error',
+        message: 'Authentication service temporarily unavailable. Please try again.',
       });
     }
   }

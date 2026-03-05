@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import scheduleController from '../controllers/schedule.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -25,7 +26,7 @@ router.get(
 );
 
 // Get all schedules
-router.get('/', authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.USER), scheduleController.getAllSchedules.bind(scheduleController));
+router.get('/', authMiddleware.authorize(Role.ADMIN, Role.LECTURER, Role.USER), applyCenterFilter, scheduleController.getAllSchedules.bind(scheduleController));
 
 // Get schedule by ID
 router.get('/:id', scheduleController.getScheduleById.bind(scheduleController));

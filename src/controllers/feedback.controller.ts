@@ -166,6 +166,7 @@ export class FeedbackController {
         moduleId,
         rating,
         sentiment,
+        centerId,
       } = req.query;
 
       const skip = (Number(page) - 1) * Number(limit);
@@ -189,6 +190,14 @@ export class FeedbackController {
 
       if (sentiment) {
         queryBuilder.andWhere('feedback.sentiment = :sentiment', { sentiment });
+      }
+
+      // Center filter (Feedback -> Module -> Program -> Centers)
+      if (centerId) {
+        queryBuilder
+          .leftJoin('module.program', 'program')
+          .leftJoin('program.centers', 'center')
+          .andWhere('center.id = :centerId', { centerId });
       }
 
       const [feedbacks, total] = await queryBuilder.getManyAndCount();

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import feedbackController from '../controllers/feedback.controller';
 import authMiddleware from '../middleware/auth.middleware';
+import { applyCenterFilter } from '../middleware/centerFilter.middleware';
 import { Role } from '../enums/Role.enum';
 
 const router = Router();
@@ -26,6 +27,7 @@ router.get(
 router.get(
   '/',
   authMiddleware.authorize(Role.ADMIN, Role.USER),
+  applyCenterFilter,
   feedbackController.getAllFeedbacks.bind(feedbackController)
 );
 

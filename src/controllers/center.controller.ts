@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AppDataSource } from '../config/database';
 import { Center } from '../entities/Center.entity';
+import { Role } from '../enums/Role.enum';
 
 export class CenterController {
   private centerRepository = AppDataSource.getRepository(Center);
@@ -27,9 +28,15 @@ export class CenterController {
         .take(Number(limit))
         .orderBy(`center.${sortBy}`, sortOrder as 'ASC' | 'DESC');
 
+      // Non-ADMIN users only see their own center
+      const user = (req as any).user;
+      if (user && user.role !== Role.ADMIN && user.centerId) {
+        queryBuilder.andWhere('center.id = :centerId', { centerId: user.centerId });
+      }
+
       // Search filter
       if (search) {
-        queryBuilder.where(
+        queryBuilder.andWhere(
           '(center.centerName ILIKE :search OR center.centerCode ILIKE :search OR center.branch ILIKE :search)',
           { search: `%${search}%` }
         );
@@ -301,6 +308,20 @@ export class CenterController {
   // Dropdown for forms (e.g., schedule creation)
   async getCentersDropdown(req: Request, res: Response) {
     try {
+      const user = (req as any).user;
+
+      // Non-ADMIN users only see their own center
+      if (user && user.role !== Role.ADMIN && user.centerId) {
+        const center = await this.centerRepository.findOne({
+          where: { id: user.centerId },
+          select: ['id', 'centerCode', 'centerName'],
+        });
+        return res.json({
+          status: 'success',
+          data: { centers: center ? [center] : [] },
+        });
+      }
+
       const centers = await this.centerRepository.find({
         select: ['id', 'centerCode', 'centerName'],
         order: { centerName: 'ASC' },
