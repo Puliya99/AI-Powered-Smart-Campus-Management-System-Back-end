@@ -13,7 +13,8 @@ interface SocketData {
   meetingCode?: string;
 }
 
-const rooms: Record<string, Set<string>> = {}; // meetingCode → Set<socket.id>
+// meetingCode → Map<socketId, { userId, userName, role }>
+const rooms: Record<string, Map<string, { userId: string; userName: string; role: string }>> = {};
 
 export let io: Server;
 
@@ -60,19 +61,19 @@ export const setupSocketIO = (httpServer: HttpServer) => {
         socket.join(meetingCode);
 
         if (!rooms[meetingCode]) {
-          rooms[meetingCode] = new Set();
+          rooms[meetingCode] = new Map();
         }
-        rooms[meetingCode].add(socket.id);
+        rooms[meetingCode].set(socket.id, { userId, userName, role });
 
-        // Get all other users in room (except self)
-        const otherUsers = Array.from(rooms[meetingCode])
-          .filter(id => id !== socket.id)
-          .map(id => ({ id }));
+        // Get all other users in room (except self), with their names
+        const otherUsers = Array.from(rooms[meetingCode].entries())
+          .filter(([id]) => id !== socket.id)
+          .map(([id, info]) => ({ id, userName: info.userName, role: info.role }));
 
         // Tell new user about existing users
         socket.emit('all-users', otherUsers);
 
-        // Tell others that new user joined
+        // Tell others that new user joined (no signal — this is just a presence notice)
         socket.to(meetingCode).emit('user-joined', {
           id: socket.id,
           userId,
@@ -87,10 +88,12 @@ export const setupSocketIO = (httpServer: HttpServer) => {
     // WebRTC signaling
     socket.on(
       'sending-signal',
-      (payload: { userToSignal: string; signal: any; callerID: string }) => {
+      (payload: { userToSignal: string; signal: any; callerID: string; userName: string; role: string }) => {
         io.to(payload.userToSignal).emit('user-joined', {
           signal: payload.signal,
           callerID: payload.callerID,
+          userName: payload.userName,
+          role: payload.role,
         });
       }
     );
@@ -130,6 +133,11 @@ export const setupSocketIO = (httpServer: HttpServer) => {
 
     socket.on('screen-share-stopped', ({ meetingCode }: { meetingCode: string }) => {
       socket.to(meetingCode).emit('screen-share-stopped', { socketId: socket.id });
+    });
+
+    // Mic mute status – relay to everyone else in the room
+    socket.on('mute-status', ({ meetingCode, muted }: { meetingCode: string; muted: boolean }) => {
+      socket.to(meetingCode).emit('mute-status', { socketId: socket.id, muted });
     });
 
     // When user leaves / disconnects
