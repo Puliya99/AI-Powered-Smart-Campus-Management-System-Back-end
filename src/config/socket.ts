@@ -20,7 +20,9 @@ export let io: Server;
 export const setupSocketIO = (httpServer: HttpServer) => {
   io = new Server(httpServer, {
     cors: {
-      origin: ['http://localhost:3000', 'https://your-frontend-domain.com'],
+      origin: (process.env.CORS_ORIGIN || 'http://localhost:3000')
+        .split(',')
+        .map((o) => o.trim()),
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -97,9 +99,9 @@ export const setupSocketIO = (httpServer: HttpServer) => {
       'returning-signal',
       (payload: {
         signal: any;
-        id: string; // who is returning the answer
+        callerID: string; // who is returning the answer
       }) => {
-        io.to(payload.id).emit('receiving-returned-signal', {
+        io.to(payload.callerID).emit('receiving-returned-signal', {
           signal: payload.signal,
           id: socket.id,
         });
