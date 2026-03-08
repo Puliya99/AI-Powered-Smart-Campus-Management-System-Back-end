@@ -178,7 +178,7 @@ export class KioskController {
       }
 
       const student = await this.studentRepository.findOne({
-        where: { passkey },
+        where: { passkey, user: { isActive: true } },
         relations: ['user'],
         select: {
           id: true,

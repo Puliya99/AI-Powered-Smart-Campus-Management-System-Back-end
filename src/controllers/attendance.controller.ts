@@ -65,6 +65,7 @@ export class AttendanceController {
         .leftJoinAndSelect('schedule.module', 'module')
         .leftJoinAndSelect('schedule.batch', 'batch')
         .leftJoinAndSelect('schedule.center', 'center')
+        .andWhere('studentUser.isActive = true')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`attendance.${sortBy}`, sortOrder as 'ASC' | 'DESC');

@@ -25,6 +25,7 @@ export class ReportController {
         .leftJoinAndSelect('enrollment.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('enrollment.batch', 'batch')
+        .andWhere('user.isActive = true')
         .leftJoinAndSelect('batch.program', 'program')
         .leftJoin('batch.centers', 'center')
         .select([
@@ -66,7 +67,8 @@ export class ReportController {
         .leftJoinAndSelect('payment.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('payment.program', 'program')
-        .leftJoinAndSelect('payment.center', 'center');
+        .leftJoinAndSelect('payment.center', 'center')
+        .andWhere('user.isActive = true');
 
       if (startDate && endDate) {
         queryBuilder.where('payment.paymentDate BETWEEN :startDate AND :endDate', {
@@ -103,6 +105,7 @@ export class ReportController {
         .leftJoinAndSelect('attendance.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('attendance.schedule', 'schedule')
+        .andWhere('user.isActive = true')
         .leftJoinAndSelect('schedule.batch', 'batch')
         .leftJoinAndSelect('schedule.module', 'module')
         .leftJoinAndSelect('schedule.center', 'center');
@@ -134,13 +137,15 @@ export class ReportController {
     try {
       const { centerId } = req.query;
 
-      const studentQuery = this.studentRepository.createQueryBuilder('student');
+      const studentQuery = this.studentRepository.createQueryBuilder('student')
+        .leftJoin('student.user', 'user')
+        .where('user.isActive = true');
       const programQuery = this.programRepository.createQueryBuilder('program');
       const batchQuery = this.batchRepository.createQueryBuilder('batch');
       const paymentQuery = this.paymentRepository.createQueryBuilder('payment');
 
       if (centerId) {
-        studentQuery.leftJoin('student.user', 'user').where('user.center = :centerId', { centerId });
+        studentQuery.andWhere('user.center = :centerId', { centerId });
         programQuery.leftJoin('program.centers', 'center').where('center.id = :centerId', { centerId });
         batchQuery.leftJoin('batch.centers', 'center').where('center.id = :centerId', { centerId });
         paymentQuery.andWhere('payment.center = :centerId', { centerId });

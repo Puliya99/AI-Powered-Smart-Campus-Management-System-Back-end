@@ -38,6 +38,7 @@ export class PaymentController {
         .leftJoinAndSelect('student.user', 'studentUser')
         .leftJoinAndSelect('payment.program', 'program')
         .leftJoinAndSelect('payment.center', 'center')
+        .andWhere('studentUser.isActive = true')
         .skip(skip)
         .take(Number(limit))
         .orderBy(`payment.${sortBy}`, sortOrder as 'ASC' | 'DESC');

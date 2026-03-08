@@ -150,10 +150,10 @@ router.put(
   studentController.updateStudent.bind(studentController)
 );
 
-// Delete/deactivate student (Admin only)
+// Delete student — USER (staff) soft-deletes (inactive), ADMIN hard-deletes
 router.delete(
   '/:id',
-  authMiddleware.authorize(Role.ADMIN),
+  authMiddleware.authorize(Role.ADMIN, Role.USER),
   studentController.deleteStudent.bind(studentController)
 );
 

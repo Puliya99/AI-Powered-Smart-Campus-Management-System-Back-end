@@ -34,6 +34,7 @@ export class EnrollmentController {
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('enrollment.program', 'program')
         .leftJoinAndSelect('enrollment.batch', 'batch')
+        .andWhere('user.isActive = true')
         .skip(skip)
         .take(Number(limit))
         .orderBy('enrollment.createdAt', 'DESC');

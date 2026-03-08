@@ -657,7 +657,8 @@ export class ResultController {
         .leftJoinAndSelect('e.student', 'student')
         .leftJoinAndSelect('student.user', 'u')
         .leftJoinAndSelect('student.payments', 'payments')
-        .where('e.program = :programId', { programId });
+        .where('e.program = :programId', { programId })
+        .andWhere('u.isActive = true');
 
       if (batchId) enrollQb = enrollQb.andWhere('e.batch = :batchId', { batchId });
 
@@ -944,7 +945,8 @@ export class ResultController {
         .leftJoinAndSelect('module.program', 'program')
         .leftJoinAndSelect('re.originalBatch', 'ob')
         .leftJoinAndSelect('re.nextBatch', 'nb')
-        .leftJoin('ob.centers', 'obc');
+        .leftJoin('ob.centers', 'obc')
+        .andWhere('u.isActive = true');
 
       if (programId) qb = qb.andWhere('program.id = :programId', { programId });
       if (moduleId)  qb = qb.andWhere('module.id = :moduleId',   { moduleId });
@@ -1042,7 +1044,8 @@ export class ResultController {
         .leftJoinAndSelect('e.program', 'program')
         .leftJoinAndSelect('program.modules', 'module')
         .leftJoinAndSelect('e.batch', 'batch')
-        .where('e.status = :status', { status: EnrollmentStatus.ACTIVE });
+        .where('e.status = :status', { status: EnrollmentStatus.ACTIVE })
+        .andWhere('u.isActive = true');
 
       if (programId) {
         qb = qb.andWhere('program.id = :programId', { programId });

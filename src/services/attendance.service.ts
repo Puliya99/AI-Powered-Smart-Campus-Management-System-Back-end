@@ -163,7 +163,7 @@ class AttendanceService {
    */
   async findStudentByPasskey(passkey: number): Promise<Student> {
     const student = await this.studentRepository.findOne({
-      where: { passkey },
+      where: { passkey, user: { isActive: true } },
       relations: ['user'],
     });
     if (!student) {
@@ -177,7 +177,7 @@ class AttendanceService {
    */
   async findStudentByFingerprintId(fingerprintId: string): Promise<Student> {
     const student = await this.studentRepository.findOne({
-      where: { fingerprintId },
+      where: { fingerprintId, user: { isActive: true } },
       relations: ['user'],
     });
     if (!student) {

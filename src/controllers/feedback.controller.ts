@@ -176,6 +176,7 @@ export class FeedbackController {
         .leftJoinAndSelect('feedback.student', 'student')
         .leftJoinAndSelect('student.user', 'user')
         .leftJoinAndSelect('feedback.module', 'module')
+        .andWhere('user.isActive = true')
         .skip(skip)
         .take(Number(limit))
         .orderBy('feedback.feedbackDate', 'DESC');

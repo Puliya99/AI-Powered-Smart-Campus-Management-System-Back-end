@@ -9,6 +9,18 @@ import { Batch } from '../entities/Batch.entity';
 import { Program } from '../entities/Program.entity';
 import { Schedule } from '../entities/Schedule.entity';
 import { WebAuthnCredential } from '../entities/WebAuthnCredential.entity';
+import { Prediction } from '../entities/Prediction.entity';
+import { Attendance } from '../entities/Attendance.entity';
+import { Payment } from '../entities/Payment.entity';
+import { Result } from '../entities/Result.entity';
+import { Feedback } from '../entities/Feedback.entity';
+import { Submission } from '../entities/Submission.entity';
+import { QuizAttempt } from '../entities/QuizAttempt.entity';
+import { QuizViolation } from '../entities/QuizViolation.entity';
+import { RepeatExamEnrollment } from '../entities/RepeatExamEnrollment.entity';
+import { MeetingParticipant } from '../entities/MeetingParticipant.entity';
+import { Borrowing } from '../entities/Borrowing.entity';
+import { Notification } from '../entities/Notification.entity';
 import emailService from '../services/email.service';
 import attendanceService from '../services/attendance.service';
 import { env } from '../config/env';
@@ -472,18 +484,22 @@ export class StudentController {
         });
       }
 
-      // Update user data
+      // Apply user field updates onto the loaded entity
       if (updateData.user) {
-        if (updateData.user.center) {
-          // If center is passed as an object { id: ... }
-          const centerId = updateData.user.center.id;
-          updateData.user.center = centerId ? { id: centerId } : null;
-        } else if (updateData.centerId !== undefined) {
-          // If centerId is passed directly
-          updateData.user.center = updateData.centerId ? { id: updateData.centerId } : null;
-        }
-        await this.userRepository.save({ ...student.user, ...updateData.user });
+        Object.assign(student.user, updateData.user);
       }
+
+      // Resolve center relation
+      if (updateData.user?.center) {
+        const centerId = updateData.user.center.id;
+        student.user.center = centerId ? ({ id: centerId } as any) : null;
+      } else if (updateData.centerId !== undefined) {
+        student.user.center = updateData.centerId ? ({ id: updateData.centerId } as any) : null;
+      }
+
+      // Always reactivate — save the actual entity instance so TypeORM issues an UPDATE
+      student.user.isActive = true;
+      await this.userRepository.save(student.user);
 
       // Update student data
       if (updateData.paymentType) {
@@ -525,10 +541,11 @@ export class StudentController {
     }
   }
 
-  // Delete/deactivate student
+  // Delete student
   async deleteStudent(req: Request, res: Response) {
     try {
       const { id } = req.params;
+      const requesterRole = (req as any).user?.role;
 
       const student = await this.studentRepository.findOne({
         where: { id },
@@ -542,14 +559,57 @@ export class StudentController {
         });
       }
 
-      // Soft delete - deactivate user
-      student.user.isActive = false;
-      await this.userRepository.save(student.user);
+      if (requesterRole === 'ADMIN') {
+        // Hard delete — remove all related records then student and user
+        const sId = student.id;
+        const uId = student.user.id;
 
-      res.json({
-        status: 'success',
-        message: 'Student deactivated successfully',
-      });
+        await AppDataSource.transaction(async (manager) => {
+          const del = (entity: any, where: string, params: any[]) =>
+            manager.query(`DELETE FROM ${entity} WHERE ${where}`, params);
+
+          // quiz_violations & quiz_answers reference quiz_attempts — delete first
+          await del('quiz_violations',        '"attemptId" IN (SELECT id FROM quiz_attempts WHERE "studentId" = $1)', [sId]);
+          await del('quiz_answers',           '"attemptId" IN (SELECT id FROM quiz_attempts WHERE "studentId" = $1)', [sId]);
+          await del('quiz_attempts',          '"studentId" = $1', [sId]);
+
+          // All other student-level records
+          await del('prediction',              '"studentId" = $1', [sId]);
+          await del('repeat_exam_enrollments', '"studentId" = $1', [sId]);
+          await del('result',                  '"studentId" = $1', [sId]);
+          await del('submissions',             '"studentId" = $1', [sId]);
+          await del('payments',                'student_id = $1', [sId]);
+          await del('attendance',              '"studentId" = $1', [sId]);
+          await del('feedback',                '"studentId" = $1', [sId]);
+          await del('web_authn_credential',    '"studentId" = $1', [sId]);
+          await del('enrollment',              '"studentId" = $1', [sId]);
+
+          // Delete the student row
+          await del('student', 'id = $1', [sId]);
+
+          // User-level records
+          await del('meeting_participants', '"userId" = $1',     [uId]);
+          await del('borrowing',            '"borrowerId" = $1', [uId]);
+          await del('notification',         '"userId" = $1',     [uId]);
+
+          // Finally delete the user
+          await del('"user"', 'id = $1', [uId]);
+        });
+
+        return res.json({
+          status: 'success',
+          message: 'Student permanently deleted',
+        });
+      } else {
+        // Soft delete — deactivate (USER / staff role)
+        student.user.isActive = false;
+        await this.userRepository.save(student.user);
+
+        return res.json({
+          status: 'success',
+          message: 'Student deactivated successfully',
+        });
+      }
     } catch (error: any) {
       res.status(400).json({
         status: 'error',
@@ -1088,12 +1148,13 @@ export class StudentController {
       const summary = {
         total:    rows.length,
         imported: 0,
+        updated:  0,
         skipped:  0,
         errors:   [] as { row: number; name: string; reason: string }[],
       };
 
       for (let i = 0; i < rows.length; i++) {
-        const row   = rows[i];
+        const row    = rows[i];
         const rowNum = i + 2; // Excel row (header = 1, data starts at 2)
         const displayName = `${row['First Name'] || ''} ${row['Last Name'] || ''}`.trim() || `Row ${rowNum}`;
 
@@ -1118,19 +1179,8 @@ export class StudentController {
           const username     = String(row['Username']).trim();
           const nic          = String(row['NIC']).trim();
           const mobileNumber = String(row['Mobile Number']).trim();
-
-          // ── Check duplicates ───────────────────────────────────────────────
-          const existing = await this.userRepository.findOne({
-            where: [{ email }, { username }, { nic }, { mobileNumber }],
-          });
-          if (existing) {
-            let reason = 'Duplicate record';
-            if (existing.email        === email)        reason = 'Email already registered';
-            else if (existing.username === username)    reason = 'Username already taken';
-            else if (existing.nic      === nic)         reason = 'NIC already registered';
-            else if (existing.mobileNumber === mobileNumber) reason = 'Mobile number already registered';
-            throw new Error(reason);
-          }
+          const firstName    = String(row['First Name']).trim();
+          const lastName     = String(row['Last Name']).trim();
 
           // ── Resolve optional relations ─────────────────────────────────────
           let centerId:  string | undefined;
@@ -1154,64 +1204,93 @@ export class StudentController {
           let dateOfBirth: Date;
           const dobRaw = row['Date of Birth'];
           if (typeof dobRaw === 'number') {
-            // Excel date serial → JS date
             dateOfBirth = new Date(Math.round((dobRaw - 25569) * 86400 * 1000));
           } else {
             dateOfBirth = new Date(String(dobRaw));
           }
           if (isNaN(dateOfBirth.getTime())) dateOfBirth = new Date('2000-01-01');
 
-          // ── Create records ─────────────────────────────────────────────────
-          const firstName = String(row['First Name']).trim();
-          const lastName  = String(row['Last Name']).trim();
-
-          const registrationNumber = await this.generateRegistrationNumber();
-          const universityNumber   = await this.generateUniversityNumber();
-
-          const user = this.userRepository.create({
-            username,
-            email,
-            password:          'Student123',
-            firstName,
-            lastName,
-            role:              'STUDENT' as any,
-            registrationNumber,
-            title:             row['Title'] || 'Mr',
-            nameWithInitials:  this.generateNameWithInitials(firstName, lastName),
-            gender:            row['Gender'] || ('OTHER' as any),
-            dateOfBirth,
-            nic,
-            mobileNumber,
-            homeNumber:        row['Home Number'] ? String(row['Home Number']) : undefined,
-            address:           row['Address'] || 'Not provided',
-            center:            centerId ? ({ id: centerId } as any) : undefined,
+          // ── Check if student already exists (match by email) ───────────────
+          const existingUser = await this.userRepository.findOne({
+            where: { email },
+            relations: ['student'],
           });
 
-          const savedUser = await this.userRepository.save(user);
+          if (existingUser) {
+            // ── UPDATE existing student ──────────────────────────────────────
+            existingUser.firstName       = firstName;
+            existingUser.lastName        = lastName;
+            existingUser.username        = username;
+            existingUser.nic             = nic;
+            existingUser.mobileNumber    = mobileNumber;
+            existingUser.title           = row['Title'] || existingUser.title || 'Mr';
+            existingUser.nameWithInitials = this.generateNameWithInitials(firstName, lastName);
+            existingUser.gender          = row['Gender'] || existingUser.gender;
+            existingUser.dateOfBirth     = dateOfBirth;
+            existingUser.homeNumber      = row['Home Number'] ? String(row['Home Number']) : existingUser.homeNumber;
+            existingUser.address         = row['Address'] || existingUser.address;
+            if (centerId) existingUser.center = { id: centerId } as any;
 
-          try {
-            await emailService.sendAccountCreationEmail(savedUser.email, savedUser.firstName, savedUser.username, 'Student123');
-          } catch { /* non-fatal */ }
+            await this.userRepository.save(existingUser);
 
-          const student = this.studentRepository.create({
-            universityNumber,
-            paymentType: (row['Payment Type'] === 'INSTALLMENT' ? 'INSTALLMENT' : 'FULL') as any,
-          });
-          student.user = savedUser;
-          const savedStudent = await this.studentRepository.save(student);
+            if (existingUser.student) {
+              if (row['Payment Type']) {
+                existingUser.student.paymentType = (row['Payment Type'] === 'INSTALLMENT' ? 'INSTALLMENT' : 'FULL') as any;
+              }
+              await this.studentRepository.save(existingUser.student);
+            }
 
-          if (programId && batchId) {
-            const enrollment = this.enrollmentRepository.create({
-              student:        savedStudent,
-              program:        { id: programId } as any,
-              batch:          { id: batchId }   as any,
-              enrollmentDate: new Date(),
-              status:         'ACTIVE' as any,
+            summary.updated++;
+          } else {
+            // ── CREATE new student ───────────────────────────────────────────
+            const registrationNumber = await this.generateRegistrationNumber();
+            const universityNumber   = await this.generateUniversityNumber();
+
+            const user = this.userRepository.create({
+              username,
+              email,
+              password:         'Student123',
+              firstName,
+              lastName,
+              role:             'STUDENT' as any,
+              registrationNumber,
+              title:            row['Title'] || 'Mr',
+              nameWithInitials: this.generateNameWithInitials(firstName, lastName),
+              gender:           row['Gender'] || ('OTHER' as any),
+              dateOfBirth,
+              nic,
+              mobileNumber,
+              homeNumber:       row['Home Number'] ? String(row['Home Number']) : undefined,
+              address:          row['Address'] || 'Not provided',
+              center:           centerId ? ({ id: centerId } as any) : undefined,
             });
-            await this.enrollmentRepository.save(enrollment);
-          }
 
-          summary.imported++;
+            const savedUser = await this.userRepository.save(user);
+
+            try {
+              await emailService.sendAccountCreationEmail(savedUser.email, savedUser.firstName, savedUser.username, 'Student123');
+            } catch { /* non-fatal */ }
+
+            const student = this.studentRepository.create({
+              universityNumber,
+              paymentType: (row['Payment Type'] === 'INSTALLMENT' ? 'INSTALLMENT' : 'FULL') as any,
+            });
+            student.user = savedUser;
+            const savedStudent = await this.studentRepository.save(student);
+
+            if (programId && batchId) {
+              const enrollment = this.enrollmentRepository.create({
+                student:        savedStudent,
+                program:        { id: programId } as any,
+                batch:          { id: batchId }   as any,
+                enrollmentDate: new Date(),
+                status:         'ACTIVE' as any,
+              });
+              await this.enrollmentRepository.save(enrollment);
+            }
+
+            summary.imported++;
+          }
         } catch (err: any) {
           summary.skipped++;
           summary.errors.push({ row: rowNum, name: displayName, reason: err.message || 'Unknown error' });
@@ -1220,7 +1299,7 @@ export class StudentController {
 
       res.status(200).json({
         status:  'success',
-        message: `Imported ${summary.imported} of ${summary.total} students`,
+        message: `Processed ${summary.total} students: ${summary.imported} created, ${summary.updated} updated`,
         data:    summary,
       });
     } catch (error: any) {
