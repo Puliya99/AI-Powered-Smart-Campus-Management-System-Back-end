@@ -49,7 +49,7 @@ export class PasswordResetService {
       console.log('✅ Password reset email sent to:', user.email);
     } catch (error) {
       console.error('❌ Failed to send password reset email:', error);
-      // Continue even if email fails - don't expose this to user
+      throw new Error('Failed to send password reset email. Please try again later.');
     }
 
     // Always log token for testing/debugging
