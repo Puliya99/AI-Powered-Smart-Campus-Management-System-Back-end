@@ -20,7 +20,8 @@ Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeO
 - **Real-time Communication** — Socket.IO for notifications and WebRTC signaling
 - **Video Meetings** — WebRTC-based online classes with participant tracking
 - **WebAuthn/Passkey** — Biometric attendance via kiosk terminals
-- **Email Integration** — SMTP emails for account creation and password resets
+- **Email Integration** — Transactional emails via Resend (production) or Nodemailer SMTP (dev fallback)
+- **Automated Reminders** — Daily scheduled emails for payment and assignment deadlines
 - **Library System** — Book management with borrowing tracking
 
 ---
@@ -37,7 +38,8 @@ Built with **Node.js**, **Express**, **TypeScript**, **PostgreSQL**, and **TypeO
 | Auth | JWT (jsonwebtoken 9.0), bcrypt 6.0 + bcryptjs 2.4, WebAuthn | — |
 | Real-time | Socket.IO | 4.8 |
 | File Uploads | Multer 1.4 (UUID filenames, 5 MB limit) | — |
-| Email | Nodemailer | 7.0 |
+| Email (production) | Resend (HTTP API) | 6.9 |
+| Email (dev/fallback) | Nodemailer (SMTP) | 7.0 |
 | Logging | Winston 3.19, Morgan 1.10 | — |
 | Security | Helmet 7.2, express-rate-limit 7.5, CORS | — |
 | Validation | class-validator 0.14, class-transformer 0.5 | — |
@@ -136,13 +138,16 @@ Copy `Back-end/.env.example` to `Back-end/.env` and fill in all required values.
 | `MAX_FILE_SIZE` | Max upload size (bytes) | `5242880` |
 | `UPLOAD_PATH` | Upload storage directory | `./uploads` |
 | `RATE_LIMIT_WINDOW_MS` | Rate limit window (ms) | `900000` |
-| `RATE_LIMIT_MAX_REQUESTS` | Max requests per window | `1000` |
+| `RATE_LIMIT_MAX_REQUESTS` | Max requests per window | `100` |
 | `CORS_ORIGIN` | Allowed CORS origins (comma-separated) | `http://localhost:3000` |
-| `SMTP_HOST` | SMTP server host | `smtp.gmail.com` |
-| `SMTP_PORT` | SMTP server port | `587` |
+| `RESEND_API_KEY` | Resend API key — primary transport in production | recommended in prod |
+| `SMTP_HOST` | SMTP server host (dev/fallback transport) | `smtp.gmail.com` |
+| `SMTP_PORT` | SMTP port | `587` |
 | `SMTP_USER` | SMTP username / email address | — |
-| `SMTP_PASSWORD` | SMTP password or app password | **required** |
+| `SMTP_PASSWORD` | SMTP app password | — |
 | `EMAIL_FROM` | Sender email address | — |
+
+> **Email transport priority:** `RESEND_API_KEY` set → Resend HTTP API. `SMTP_*` set → Nodemailer SMTP. Neither set → email disabled with a warning logged at startup.
 | `LOG_LEVEL` | Winston log level | `info` |
 | `FRONTEND_URL` | Frontend URL (used in email links) | `http://localhost:3000` |
 | `WEBAUTHN_RP_NAME` | WebAuthn relying party name | — |
@@ -168,10 +173,12 @@ Back-end/
 │   │   ├── index.ts         # Master router — mounts all sub-routers at /api/v1
 │   │   └── *.routes.ts      # 28 route definition files
 │   ├── services/
-│   │   ├── ai.service.ts    # HTTP proxy to Python AI module
-│   │   ├── auth.service.ts  # Register, login, JWT, password management
-│   │   ├── email.service.ts # SMTP emails via Nodemailer
-│   │   ├── scheduler.service.ts  # Weekly batch AI prediction runner
+│   │   ├── ai.service.ts              # HTTP proxy to Python AI module
+│   │   ├── auth.service.ts            # Register, login, JWT, password management
+│   │   ├── email.service.ts           # Dual transport: Resend (prod) / Nodemailer SMTP (dev)
+│   │   ├── scheduler.service.ts       # Weekly batch AI prediction runner
+│   │   ├── paymentReminder.service.ts # Daily payment deadline email reminders
+│   │   ├── assignmentReminder.service.ts # Daily assignment deadline email reminders
 │   │   └── ...              # attendance, dashboard, notification, user, etc.
 │   ├── entities/            # 31 TypeORM entities (PostgreSQL tables)
 │   │   ├── User, Student, Lecturer, Admin

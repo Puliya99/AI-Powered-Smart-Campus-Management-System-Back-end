@@ -327,11 +327,12 @@ export class AiService {
       const response = await axios.post(`${this.AI_SERVICE_URL}/chat`, {
         courseId,
         question
-      }, { timeout: 120000 });
+      }, { timeout: 100000 });
       return response.data;
-    } catch (error) {
-      console.error('Error in AI chat service:', error);
-      throw new Error('Failed to get answer from AI service');
+    } catch (error: any) {
+      const detail = error?.response?.data?.detail || error?.response?.data?.message || error?.message || 'Unknown error';
+      console.error('Error in AI chat service:', detail);
+      throw new Error(`AI service error: ${detail}`);
     }
   }
 }

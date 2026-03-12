@@ -1,55 +1,103 @@
 import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { env } from '../config/env';
 
 export class EmailService {
-  private transporter: nodemailer.Transporter;
+  private resend: Resend | null = null;
+  private transporter: nodemailer.Transporter | null = null;
 
   constructor() {
-    // Create transporter with SMTP configuration
-    this.transporter = nodemailer.createTransport({
-      host: env.SMTP_HOST,
-      port: env.SMTP_PORT,
-      secure: env.SMTP_PORT === 465, // true for 465, false for other ports
-      auth: {
-        user: env.SMTP_USER,
-        pass: env.SMTP_PASSWORD,
-      },
-    });
-
-    // Verify transporter configuration
-    this.verifyConnection();
+    if (env.RESEND_API_KEY) {
+      // Production: use Resend HTTP API (works on any host, no SMTP port restrictions)
+      this.resend = new Resend(env.RESEND_API_KEY);
+      console.log('📧 Email service: using Resend');
+    } else if (env.SMTP_HOST && env.SMTP_USER && env.SMTP_PASSWORD) {
+      // Local/fallback: use nodemailer SMTP
+      this.transporter = nodemailer.createTransport({
+        host: env.SMTP_HOST,
+        port: env.SMTP_PORT,
+        secure: env.SMTP_PORT === 465,
+        requireTLS: env.SMTP_PORT !== 465,
+        auth: {
+          user: env.SMTP_USER,
+          pass: env.SMTP_PASSWORD,
+        },
+        tls: {
+          rejectUnauthorized: false,
+        },
+      });
+      this.verifySmtpConnection();
+      console.log('📧 Email service: using SMTP');
+    } else {
+      console.warn('⚠️  Email service: no transport configured (set RESEND_API_KEY or SMTP_* vars)');
+    }
   }
 
-  private async verifyConnection() {
+  private async verifySmtpConnection() {
     try {
-      await this.transporter.verify();
-      console.log('✅ Email service is ready to send emails');
+      await this.transporter!.verify();
+      console.log('✅ SMTP connection verified');
     } catch (error) {
-      console.error('❌ Email service configuration error:', error);
+      console.error('❌ SMTP connection error:', error);
     }
+  }
+
+  private get fromAddress(): string {
+    return env.EMAIL_FROM || env.SMTP_USER || 'noreply@smartcampus.edu';
+  }
+
+  /**
+   * Core send method — routes to Resend or SMTP depending on configuration
+   */
+  private async send(options: {
+    to: string;
+    subject: string;
+    html: string;
+    text: string;
+  }): Promise<{ success: boolean; messageId?: string }> {
+    const from = `Smart Campus <${this.fromAddress}>`;
+
+    if (this.resend) {
+      const { data, error } = await this.resend.emails.send({
+        from,
+        to: [options.to],
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      });
+      if (error) throw new Error(error.message);
+      return { success: true, messageId: data?.id };
+    }
+
+    if (this.transporter) {
+      const info = await this.transporter.sendMail({
+        from,
+        to: options.to,
+        subject: options.subject,
+        html: options.html,
+        text: options.text,
+      });
+      return { success: true, messageId: info.messageId };
+    }
+
+    throw new Error('No email transport configured');
   }
 
   /**
    * Send password reset email
    */
   async sendPasswordResetEmail(email: string, resetToken: string) {
-    const resetUrl = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/reset-password/${resetToken}`;
-
-    const mailOptions = {
-      from: {
-        name: 'Smart Campus',
-        address: env.EMAIL_FROM || env.SMTP_USER!,
-      },
-      to: email,
-      subject: 'Password Reset Request',
-      html: this.getPasswordResetEmailTemplate(resetUrl),
-      text: `You requested a password reset. Click this link to reset your password: ${resetUrl}. This link will expire in 1 hour.`,
-    };
+    const resetUrl = `${env.FRONTEND_URL}/reset-password/${resetToken}`;
 
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Password reset email sent:', info.messageId);
-      return { success: true, messageId: info.messageId };
+      const result = await this.send({
+        to: email,
+        subject: 'Password Reset Request',
+        html: this.getPasswordResetEmailTemplate(resetUrl),
+        text: `You requested a password reset. Click this link to reset your password: ${resetUrl}. This link will expire in 1 hour.`,
+      });
+      console.log('✅ Password reset email sent:', result.messageId);
+      return result;
     } catch (error) {
       console.error('❌ Failed to send password reset email:', error);
       throw new Error('Failed to send password reset email');
@@ -60,24 +108,17 @@ export class EmailService {
    * Send welcome email to new users
    */
   async sendWelcomeEmail(email: string, firstName: string) {
-    const mailOptions = {
-      from: {
-        name: 'Smart Campus',
-        address: env.EMAIL_FROM || env.SMTP_USER!,
-      },
-      to: email,
-      subject: 'Welcome to Smart Campus!',
-      html: this.getWelcomeEmailTemplate(firstName),
-      text: `Welcome to Smart Campus, ${firstName}! Your account has been successfully created.`,
-    };
-
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Welcome email sent:', info.messageId);
-      return { success: true, messageId: info.messageId };
+      const result = await this.send({
+        to: email,
+        subject: 'Welcome to Smart Campus!',
+        html: this.getWelcomeEmailTemplate(firstName),
+        text: `Welcome to Smart Campus, ${firstName}! Your account has been successfully created.`,
+      });
+      console.log('✅ Welcome email sent:', result.messageId);
+      return result;
     } catch (error) {
       console.error('❌ Failed to send welcome email:', error);
-      // Don't throw error for welcome email to avoid blocking registration
       return { success: false };
     }
   }
@@ -86,21 +127,15 @@ export class EmailService {
    * Send password changed confirmation email
    */
   async sendPasswordChangedEmail(email: string, firstName: string) {
-    const mailOptions = {
-      from: {
-        name: 'Smart Campus',
-        address: env.EMAIL_FROM || env.SMTP_USER!,
-      },
-      to: email,
-      subject: 'Password Changed Successfully',
-      html: this.getPasswordChangedEmailTemplate(firstName),
-      text: `Hello ${firstName}, your password has been changed successfully. If you didn't make this change, please contact support immediately.`,
-    };
-
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Password changed email sent:', info.messageId);
-      return { success: true, messageId: info.messageId };
+      const result = await this.send({
+        to: email,
+        subject: 'Password Changed Successfully',
+        html: this.getPasswordChangedEmailTemplate(firstName),
+        text: `Hello ${firstName}, your password has been changed successfully. If you didn't make this change, please contact support immediately.`,
+      });
+      console.log('✅ Password changed email sent:', result.messageId);
+      return result;
     } catch (error) {
       console.error('❌ Failed to send password changed email:', error);
       return { success: false };
@@ -113,23 +148,42 @@ export class EmailService {
   async sendAccountCreationEmail(email: string, firstName: string, username: string, passwordText: string) {
     const loginUrl = `${env.FRONTEND_URL}/login`;
 
-    const mailOptions = {
-      from: {
-        name: 'Smart Campus',
-        address: env.EMAIL_FROM || env.SMTP_USER!,
-      },
-      to: email,
-      subject: 'Your Smart Campus Account Details',
-      html: this.getAccountCreationEmailTemplate(firstName, username, passwordText, loginUrl),
-      text: `Hello ${firstName}, your Smart Campus account has been created.\n\nLogin Details:\nURL: ${loginUrl}\nUsername: ${username}\nPassword: ${passwordText}\n\nPlease change your password after logging in.`,
-    };
-
     try {
-      const info = await this.transporter.sendMail(mailOptions);
-      console.log('✅ Account creation email sent:', info.messageId);
-      return { success: true, messageId: info.messageId };
+      const result = await this.send({
+        to: email,
+        subject: 'Your Smart Campus Account Details',
+        html: this.getAccountCreationEmailTemplate(firstName, username, passwordText, loginUrl),
+        text: `Hello ${firstName}, your Smart Campus account has been created.\n\nLogin Details:\nURL: ${loginUrl}\nUsername: ${username}\nPassword: ${passwordText}\n\nPlease change your password after logging in.`,
+      });
+      console.log('✅ Account creation email sent:', result.messageId);
+      return result;
     } catch (error) {
       console.error('❌ Failed to send account creation email:', error);
+      return { success: false };
+    }
+  }
+
+  /**
+   * Send a general notification email
+   */
+  async sendNotificationEmail(email: string, title: string, message: string, link?: string, firstName?: string) {
+    if (!this.resend && (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASSWORD)) {
+      return { success: false, reason: 'Email not configured' };
+    }
+
+    const frontendUrl = env.FRONTEND_URL;
+    const readUrl = link ? `${frontendUrl}${link}` : `${frontendUrl}/notifications`;
+
+    try {
+      const result = await this.send({
+        to: email,
+        subject: `New Notification: ${title}`,
+        html: this.getNotificationEmailTemplate(title, message, readUrl, firstName),
+        text: `Hello${firstName ? ` ${firstName}` : ''},\n\nYou have received a new notification on Smart Campus.\n\n${title}\n\n${message}\n\nPlease log in to read this notification:\n${readUrl}\n\n© ${new Date().getFullYear()} Smart Campus. This is an automated email, please do not reply.`,
+      });
+      return result;
+    } catch (error) {
+      console.error('❌ Failed to send notification email:', error);
       return { success: false };
     }
   }
@@ -218,32 +272,32 @@ export class EmailService {
           <div class="header">
             <div class="logo">🎓 Smart Campus</div>
           </div>
-          
+
           <div class="content">
             <h1>Password Reset Request</h1>
-            
+
             <p>Hello,</p>
-            
+
             <p>We received a request to reset your password for your Smart Campus account. Click the button below to reset your password:</p>
-            
+
             <div style="text-align: center;">
               <a href="${resetUrl}" class="button">Reset Password</a>
             </div>
-            
+
             <div class="warning">
               <strong>⚠️ Important:</strong> This link will expire in <strong>1 hour</strong> for security reasons.
             </div>
-            
+
             <p>If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
-            
+
             <div class="divider"></div>
-            
+
             <p style="color: #6B7280; font-size: 14px;">
               If the button doesn't work, copy and paste this link into your browser:<br>
               <a href="${resetUrl}" style="color: #4F46E5; word-break: break-all;">${resetUrl}</a>
             </p>
           </div>
-          
+
           <div class="footer">
             <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
@@ -324,14 +378,14 @@ export class EmailService {
           <div class="header">
             <div class="logo">🎓 Smart Campus</div>
           </div>
-          
+
           <div class="content">
             <h1>Welcome to Smart Campus, ${firstName}! 🎉</h1>
-            
+
             <p>Your account has been successfully created. We're excited to have you on board!</p>
-            
+
             <p>With Smart Campus, you can:</p>
-            
+
             <ul class="feature-list">
               <li>✅ Track your attendance and academic progress</li>
               <li>📚 Access course materials and assignments</li>
@@ -339,10 +393,10 @@ export class EmailService {
               <li>📊 View detailed analytics and insights</li>
               <li>📱 Stay updated with notifications</li>
             </ul>
-            
+
             <p>If you have any questions or need assistance, feel free to reach out to our support team.</p>
           </div>
-          
+
           <div class="footer">
             <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
           </div>
@@ -453,14 +507,14 @@ export class EmailService {
           <div class="header">
             <div class="logo">🎓 Smart Campus</div>
           </div>
-          
+
           <div class="content">
             <h1>Welcome to Smart Campus</h1>
-            
+
             <p>Hello ${firstName},</p>
-            
+
             <p>Your account has been successfully created. You can now log in to the system using the credentials below:</p>
-            
+
             <div class="credentials">
               <div class="credential-item">
                 <span class="label">System URL</span>
@@ -475,16 +529,16 @@ export class EmailService {
                 <span class="value">${passwordText}</span>
               </div>
             </div>
-            
+
             <div class="button-container">
               <a href="${loginUrl}" class="button">Log In Now</a>
             </div>
-            
+
             <div class="warning">
               <strong>Security Notice:</strong> For your security, please change your password immediately after your first login.
             </div>
           </div>
-          
+
           <div class="footer">
             <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
           </div>
@@ -567,22 +621,22 @@ export class EmailService {
           <div class="header">
             <div class="logo">🎓 Smart Campus</div>
           </div>
-          
+
           <div class="content">
             <h1>Password Changed Successfully</h1>
-            
+
             <p>Hello ${firstName},</p>
-            
+
             <div class="alert">
               <strong>✓ Success:</strong> Your password has been changed successfully.
             </div>
-            
+
             <p>Your Smart Campus account password was recently changed. If you made this change, no further action is needed.</p>
-            
+
             <div class="warning">
               <strong>⚠️ Security Alert:</strong> If you <strong>did not</strong> make this change, please contact our support team immediately to secure your account.
             </div>
-            
+
             <p>For your security, we recommend:</p>
             <ul>
               <li>Using a strong, unique password</li>
@@ -590,7 +644,7 @@ export class EmailService {
               <li>Changing your password regularly</li>
             </ul>
           </div>
-          
+
           <div class="footer">
             <p>© ${new Date().getFullYear()} Smart Campus. All rights reserved.</p>
             <p>This is an automated email, please do not reply.</p>
@@ -599,37 +653,6 @@ export class EmailService {
       </body>
       </html>
     `;
-  }
-  /**
-   * Send a general notification email
-   */
-  async sendNotificationEmail(email: string, title: string, message: string, link?: string, firstName?: string) {
-    // Skip if SMTP is not configured
-    if (!env.SMTP_HOST || !env.SMTP_USER || !env.SMTP_PASSWORD) {
-      return { success: false, reason: 'SMTP not configured' };
-    }
-
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-    const readUrl = link ? `${frontendUrl}${link}` : `${frontendUrl}/notifications`;
-
-    const mailOptions = {
-      from: {
-        name: 'Smart Campus',
-        address: env.EMAIL_FROM || env.SMTP_USER!,
-      },
-      to: email,
-      subject: `New Notification: ${title}`,
-      html: this.getNotificationEmailTemplate(title, message, readUrl, firstName),
-      text: `Hello${firstName ? ` ${firstName}` : ''},\n\nYou have received a new notification on Smart Campus.\n\n${title}\n\n${message}\n\nPlease log in to read this notification:\n${readUrl}\n\n© ${new Date().getFullYear()} Smart Campus. This is an automated email, please do not reply.`,
-    };
-
-    try {
-      const info = await this.transporter.sendMail(mailOptions);
-      return { success: true, messageId: info.messageId };
-    } catch (error) {
-      console.error('❌ Failed to send notification email:', error);
-      return { success: false };
-    }
   }
 
   /**
