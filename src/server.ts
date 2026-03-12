@@ -8,6 +8,7 @@ import schedulerService from './services/scheduler.service';
 import libraryReminderService from './services/libraryReminder.service';
 import timetableReminderService from './services/timetableReminder.service';
 import paymentReminderService from './services/paymentReminder.service';
+import assignmentReminderService from './services/assignmentReminder.service';
 
 const PORT = process.env.PORT || 5000;
 
@@ -35,6 +36,9 @@ const startServer = async () => {
 
     // Start Payment Reminder Service
     paymentReminderService.start();
+
+    // Start Assignment Reminder Service
+    assignmentReminderService.start();
 
     // Start server
     const server = httpServer.listen(PORT, () => {
@@ -64,6 +68,7 @@ const startServer = async () => {
         libraryReminderService.stop();
         timetableReminderService.stop();
         paymentReminderService.stop();
+        assignmentReminderService.stop();
 
         try {
           // Close database connection

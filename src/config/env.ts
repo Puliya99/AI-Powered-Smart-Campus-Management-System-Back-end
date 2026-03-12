@@ -36,6 +36,7 @@ interface EnvConfig {
   CORS_ORIGIN: string;
   
   // Email (Optional)
+  RESEND_API_KEY?: string;
   SMTP_HOST?: string;
   SMTP_PORT?: number;
   SMTP_USER?: string;
@@ -115,6 +116,7 @@ export const env: EnvConfig = {
   CORS_ORIGIN: getEnv('CORS_ORIGIN', '*'),
   
   // Email (Optional)
+  RESEND_API_KEY: process.env.RESEND_API_KEY,
   SMTP_HOST: process.env.SMTP_HOST,
   SMTP_PORT: process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT) : undefined,
   SMTP_USER: process.env.SMTP_USER,
